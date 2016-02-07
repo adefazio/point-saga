@@ -1,0 +1,11 @@
+*.pyc
+*.mat
+*.vw
+*.binary
+*.vwmodel
+*.model
+optimization/*.c
+optimization/*.html
+optimization/*.so
+build
+*.so
