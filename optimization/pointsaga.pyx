@@ -13,11 +13,6 @@ from libc.math cimport exp, sqrt, log, fabs
 
 from cpython cimport bool
 
-#from hinge_loss import HingeLoss
-#from logistic_loss import LogisticLoss
-
-#from loss import getLoss
-
 STUFF = "Hi"
 
 ctypedef np.float32_t dtype_t
@@ -29,7 +24,7 @@ from get_loss import getLoss
 @cython.cdivision(True)
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def pointsaga2(A, double[:] b, props):
+def pointsaga(A, double[:] b, props):
     
     # temporaries
     cdef double[:] ydata
@@ -113,7 +108,7 @@ def pointsaga2(A, double[:] b, props):
     
     logger.info("Gamma: %1.2e, reg: %1.3e, prox_conversion_factor: %1.8f, 1-reg*gamma: %1.8f", 
                 gamma, reg, prox_conversion_factor, 1.0 - reg*gamma)
-    logger.info("Point-saga2 starting, npoints=%d, ndims=%d" % (n, m))
+    logger.info("Point-saga starting, npoints=%d, ndims=%d" % (n, m))
     
     loss.store_training_loss(xk)   
     
@@ -161,9 +156,7 @@ def pointsaga2(A, double[:] b, props):
               for p in range(m):
                   xk[p] = prox_conversion_factor*xk[p]
             
-            activation = wscale * spdot(xk, ydata, yindices, ylen)            
-            # 
-            #cnew = loss.prox(gamma_prime, i, activation)
+            activation = wscale * spdot(xk, ydata, yindices, ylen)
             (new_loc, cnew) = loss.prox(gamma_prime, i, activation)
             
             cold = c[i]
@@ -178,9 +171,6 @@ def pointsaga2(A, double[:] b, props):
                 logger.info("Bad prox. sg: %1.8e, prox-sg: %1.8e, sg2: %1.8e, sg3: %1.8e",
                             sg, cnew, sg/gamma_prime, sg*gamma_prime)
             
-            
-            #logger.info("k=%d, ry=%2d, a=%1.3f, cold=%1.3f, cnew=%1.3f, new_loc=%1.3f, wscale=%1.1e, gamma: %1.1e, gamma_prime: %1.1e",
-            #    k, ry, activation, cold, cnew, new_loc, wscale, gamma, gamma_prime)
             
             # Update xk with the f_j^prime(phi_j) (with wscale scaling)
             add_weighted(xk, ydata, yindices, ylen, -cnew*gamma_prime/wscale)
@@ -207,6 +197,6 @@ def pointsaga2(A, double[:] b, props):
         
         loss.store_training_loss(xk)    
     
-    logger.info("Point-saga2 finished")
+    logger.info("Point-saga finished")
     
     return {'wlist': loss.wlist, 'flist': loss.flist, 'errorlist': loss.errorlist}

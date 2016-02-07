@@ -19,8 +19,7 @@ matplotlib.rcParams['text.usetex'] = True
 import matplotlib.pyplot as plt
 
 from pegasos import pegasos
-from pointsaga2 import pointsaga2
-from pointsaga1 import pointsaga1
+from pointsaga import pointsaga
 from saga import saga
 from sdca import sdca
 from csdca import csdca
@@ -49,7 +48,7 @@ logger.info("Train Proportions: -1 %d   1: %d", sum(d == -1.0), sum(d == 1.0))
 
 def runit():
     
-    result = pointsaga2(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001})
+    result = pointsaga(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001})
 
 if __name__ == "__main__":
     runit()

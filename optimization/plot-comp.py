@@ -8,7 +8,7 @@ import scipy
 import scipy.sparse
 import scipy.io
 import cPickle as pickle
-
+import os
 
 
 import matplotlib
@@ -20,8 +20,7 @@ matplotlib.rcParams['text.usetex'] = True
 import matplotlib.pyplot as plt
 
 from pegasos import pegasos
-from pointsaga2 import pointsaga2
-from pointsaga1 import pointsaga1
+from pointsaga import pointsaga
 from saga import saga
 from sdca import sdca
 from csdca import csdca
@@ -76,17 +75,16 @@ if __name__ == "__main__":
         
         baseline_method = "Point-SAGA"
         propsOverrides = {"Pegasos": {}, "Pegasos avg": {'returnAveraged': True}, 
-                         "SAGA": {}, "Point-SAGA": {}, "Point-SAGA1": {}, "SDCA": {}, "Catalyst-SDCA": {}}
+                         "SAGA": {}, "Point-SAGA": {}, "SDCA": {}, "Catalyst-SDCA": {}}
         stepSizes = {"Pegasos": [1024, 512, 128, 64, 32, 16, 8, 4, 2, 1, 0.5, 0.2, 0.1, 0.05], 
                      "Pegasos avg": [1024, 512, 128, 64, 32, 16, 8, 4, 2, 1, 0.5, 0.2, 0.1, 0.05], 
                      "SAGA": [1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01],
                      "Point-SAGA": [2056, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01],
-                     "Point-SAGA1": [2056, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001, 0.0005],
                      "SDCA": [1],
                      "Catalyst-SDCA": [1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001, 0.0005, 0.0001, 0.00005, 0.00001, 0.000005, 0.000001],
                  }
         runFunc = {"Pegasos": pegasos, "Pegasos avg": pegasos, "SAGA": saga, 
-                   "Point-SAGA": pointsaga2, "Point-SAGA1": pointsaga1, 
+                   "Point-SAGA": pointsaga, 
                    "SDCA": sdca, "Catalyst-SDCA": csdca}
     
         #SDCA doesn't support 0 reg
@@ -294,6 +292,9 @@ if __name__ == "__main__":
                 
                 comparison(fn, props)
                 plot_comparison(fn)
+
+    if not os.path.exists("plots"):
+        os.makedirs("plots")
 
     fn = "plots/australian"
     datasetSizeSpread(fn, {'reg': 0.0001, 'dataset': 'australian_scale.mat', 'passes': 30})
