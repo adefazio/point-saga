@@ -23,6 +23,7 @@ from pointsaga import pointsaga
 from saga import saga
 from sdca import sdca
 from csdca import csdca
+from diagonalsaga import diagonalsaga
 
 import time
 
@@ -48,7 +49,8 @@ logger.info("Train Proportions: -1 %d   1: %d", sum(d == -1.0), sum(d == 1.0))
 
 def runit():
     
-    result = pointsaga(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001})
+    #result = pointsaga(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001, 'stepSize':0.1})
+    result = diagonalsaga(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001, 'stepSize':0.1/1000})
 
 if __name__ == "__main__":
     runit()

@@ -51,6 +51,10 @@ cdef class Loss:
   cpdef double subgradient(self, unsigned int i, double activation):
     raise NotImplementedError( "subgradient" )
     
+  @cython.cdivision(True)
+  @cython.boundscheck(False) 
+  cpdef double hessianscale(self, unsigned int i, double activation):
+    raise NotImplementedError( "subgradient" )
     
   @cython.cdivision(True)
   @cython.boundscheck(False)

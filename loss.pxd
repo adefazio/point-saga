@@ -27,6 +27,8 @@ cdef class Loss:
    
   cpdef double subgradient(self, unsigned int i, double activation)
     
+  cpdef double hessianscale(self, unsigned int i, double activation)  
+    
   cpdef tuple prox(self, double gamma, unsigned int i, double activation)
     
   cpdef compute_loss(self, double[:] w, txt=?)

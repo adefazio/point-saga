@@ -32,7 +32,15 @@ cdef class LogisticLoss(Loss):
   cpdef double subgradient(self, unsigned int i, double activation):
     cdef double ry = self.d[i]
      
-    return(-ry/(1 + exp(activation*ry)))
+    return(-ry/(1.0 + exp(activation*ry)))
+   
+  @cython.cdivision(True)
+  @cython.boundscheck(False) 
+  cpdef double hessianscale(self, unsigned int i, double activation):
+    cdef double ry = self.d[i]
+    cdef double sigma = self.subgradient(i, activation)
+    #print "Sigma: %1.3e ry=%1.3e, act=%1.3e" % (sigma, ry, activation)
+    return((-ry)*sigma - sigma*sigma)
     
   @cython.cdivision(True)
   @cython.boundscheck(False)

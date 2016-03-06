@@ -21,8 +21,12 @@ cdef class SquaredLoss(Loss):
     cdef double ry = self.d[i]
      
     return(activation - ry)
-    
-    
+
+  @cython.cdivision(True)
+  @cython.boundscheck(False) 
+  cpdef double hessianscale(self, unsigned int i, double activation):
+    return(1.0)
+
   @cython.cdivision(True)
   @cython.boundscheck(False)
   cpdef tuple prox(self, double gamma, unsigned int i, double activation):

@@ -78,3 +78,37 @@ cdef double spdot(double[:] x, double[:] ydata , int[:] yindices, int ylen):
         v += ydata[i]*x[yindices[i]]
         
     return v
+
+
+######################
+
+# Performs the lagged update of x by g.
+@cython.cdivision(True)
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef void lagged_update_diag(
+  long k, double[:] x, double[:] hk, double[:] g, unsigned int[:] lag, 
+  int[:] yindices, int ylen, double[:] lag_scaling, double a):
+    
+    cdef unsigned int i
+    cdef unsigned int ind
+    cdef unsigned long lagged_amount = 0
+    
+    for i in range(ylen):
+        ind = yindices[i]
+        lagged_amount = k-lag[ind]
+        lag[ind] = k
+        x[ind] += lag_scaling[lagged_amount]*(a*g[ind])/sqrt(hk[ind])
+
+# Performs x += a*y, where x is dense and y is sparse.
+@cython.cdivision(True)
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef void add_weighted_diag(double[:] x, double[:] hk, double[:] ydata , 
+                            int[:] yindices, int ylen, double a):
+    cdef unsigned int i
+    cdef unsigned int ind
+
+    for i in range(ylen):
+        ind = yindices[i]
+        x[ind] += a*ydata[i]/sqrt(hk[ind])
