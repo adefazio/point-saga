@@ -72,6 +72,13 @@ cdef class LogisticLoss(Loss):
    
   @cython.cdivision(True)
   @cython.boundscheck(False) 
+  cpdef double lipschitz(self, unsigned int i, double activation):
+    cdef double ry = self.d[i]
+    cdef double sigma = 1/(1 + exp(-activation*ry)) 
+    return(sigma*(1-sigma)*self.norm_sq[i])
+   
+  @cython.cdivision(True)
+  @cython.boundscheck(False) 
   cpdef double subgradient(self, unsigned int i, double activation):
     cdef double ry = self.d[i]
      

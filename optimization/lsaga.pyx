@@ -153,12 +153,18 @@ def lsaga(A, double[:] b, props):
             add_weighted(gk, ydata, yindices, ylen, cchange/n) 
             
             # Line search
-            Lp = loss.linesearch(i, activation, L)
+            if True:
+              Lp = loss.lipschitz(i, activation)
+              if Lp < 1.1*L:
+                Lp = L
+            else:
+              Lp = loss.linesearch(i, activation, L)
+              
             if Lp != L:
               unlag(k, m, gamma, betak, lag, xk, gk, lag_scaling)
               betak = 1.0
               gamma = 1.0/(Lp+reg) 
-              logger.info("Increasing L from %1.1f to %1.1f", L, Lp)
+              logger.info("Increasing L from %1.9f to %1.9f", L, Lp)
               L = Lp
               
               geosum = 1.0
