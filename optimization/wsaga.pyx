@@ -30,7 +30,7 @@ def wsaga(A, double[:] b, props):
     # temporaries
     cdef double[:] ydata
     cdef int[:] yindices
-    cdef unsigned int i, j, epoch, lagged_amount, ls_update
+    cdef unsigned int i, j, epoch, lagged_amount, ls_update, r
     cdef int indstart, indend, ylen, ind
     cdef double cnew, activation, cchange, gscaling, ry, Lp
     
@@ -134,15 +134,19 @@ def wsaga(A, double[:] b, props):
             cnew = loss.subgradient(i, activation)
 
             cchange = cnew-c[i]
-            c[i] = cnew
+            if False:
+              c[i] = cnew
             betak *= 1.0 - reg*gamma
             
             # Line search
             if True:
               Lp = loss.lipschitz(i, activation)
               
-              Lavg += (Lp-ls[i])/n
-              ls[i] = Lp
+              if False:
+                Lavg += (Lp-ls[i])/n
+                ls[i] = Lp
+              else:
+                Lavg = Lp
               
             if Lavg > 1.1*L:
               unlag(k, m, gamma, betak, lag, xk, gk, lag_scaling)
@@ -164,8 +168,33 @@ def wsaga(A, double[:] b, props):
             # Perform the gradient-average part of the step
             lagged_update(k, xk, gk, lag, yindices, ylen, lag_scaling, -gamma/betak)
             
-            # update the gradient average
-            add_weighted(gk, ydata, yindices, ylen, cchange/n) 
+            # Uniform sampling for the gradient table update:
+            if True:
+              if False:
+                # update the gradient average
+                add_weighted(gk, ydata, yindices, ylen, cchange/n) 
+              else:
+                r = np.random.randint(0, n)
+                indstart = indptr[r]
+                indend = indptr[r+1]
+                ydata = data[indstart:indend]
+                yindices = indices[indstart:indend]
+                ylen = indend-indstart
+                
+                # Apply the missed updates to xk just-in-time
+                lagged_update(k, xk, gk, lag, yindices, ylen, lag_scaling, -gamma/betak)
+            
+                activation = betak * spdot(xk, ydata, yindices, ylen)
+            
+                cnew = loss.subgradient(r, activation)
+
+                cchange = cnew-c[r]
+                c[r] = cnew
+                
+                # Update gradient average for uniformly sampled point.
+                add_weighted(gk, ydata, yindices, ylen, cchange/n) 
+            else:
+              add_weighted(gk, ydata, yindices, ylen, cchange/n) 
             
             # Update lag table
             geosum *= mult

@@ -56,8 +56,10 @@ def runit():
     #INFO:logisticloss: loss: 0.258281887291
     
     #result = saga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
-    #result = lsaga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    result = lsaga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
     #0.258275346457 
+    #0.258275346457
+    #0.258275346442
     #Australian non-scaled. Best step size 1.0/(5 000 000) , 'stepSize': 0.0000002
     # At one point L is increased to 44,942,696. Yikes.
     #Lsaga, initial L: 370 508. Doesn't seem to be actually working.
@@ -65,6 +67,8 @@ def runit():
     
     # For australian_scaled norms are between 6.69 and 13.39.
     
-    result = wsaga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    #result = wsaga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    # Ok, version where we decouple table update from step seems to work. good.
+    # Now to add the proportional sampling.
 if __name__ == "__main__":
     runit()
