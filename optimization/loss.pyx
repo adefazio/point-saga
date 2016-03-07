@@ -40,11 +40,17 @@ cdef class Loss:
     self.avg_flist = []
     self.avg_errorlist = []
     
+    logger = logging.getLogger("loss")
+    
     # Compute norm squared for each datapoint. Needed for prox.
     self.norm_sq = np.zeros(self.npoints)
     for i in range(self.npoints):
       rdata = self.data[self.indptr[i]:self.indptr[i+1]]
       self.norm_sq[i] = np.dot(rdata, rdata)
+      
+    logger.info("Squared norm percentiles")
+    perc = np.percentiles(self.norm_sq, [0, 0.025, 0.25, 0.5, 0.75, 0.975, 1.0])
+    logger.info(perc)
    
   @cython.cdivision(True)
   @cython.boundscheck(False) 
