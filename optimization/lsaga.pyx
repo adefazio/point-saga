@@ -141,22 +141,12 @@ def lsaga(A, double[:] b, props):
             c[i] = cnew
             betak *= 1.0 - reg*gamma
             
-            # Update xk with sparse step bit (with betak scaling)
-            add_weighted(xk, ydata, yindices, ylen, -cchange*gamma/betak)
-            
-            k += 1
-            
-            # Perform the gradient-average part of the step
-            lagged_update(k, xk, gk, lag, yindices, ylen, lag_scaling, -gamma/betak)
-            
-            # update the gradient average
-            add_weighted(gk, ydata, yindices, ylen, cchange/n) 
-            
             # Line search
             if True:
               Lp = loss.lipschitz(i, activation)
               if Lp < 1.1*L:
                 Lp = L
+                #logger.info("LP: %1.2f", Lp)
             else:
               Lp = loss.linesearch(i, activation, L)
               
@@ -178,6 +168,17 @@ def lsaga(A, double[:] b, props):
               ls_update = 2
               geosum = 1.0
             
+            # Update xk with sparse step bit (with betak scaling)
+            add_weighted(xk, ydata, yindices, ylen, -cchange*gamma/betak)
+            
+            k += 1
+            
+            # Perform the gradient-average part of the step
+            lagged_update(k, xk, gk, lag, yindices, ylen, lag_scaling, -gamma/betak)
+            
+            # update the gradient average
+            add_weighted(gk, ydata, yindices, ylen, cchange/n) 
+            
             # Update lag table
             geosum *= mult
             lag_scaling[ls_update] = lag_scaling[ls_update-1] + geosum
@@ -193,6 +194,7 @@ def lsaga(A, double[:] b, props):
         unlag(k, m, gamma, betak, lag, xk, gk, lag_scaling)
         betak = 1.0
         L /= 2.0
+        gamma = 1.0/(L+reg) 
         
         ls_update = 2
         geosum = 1.0
@@ -209,6 +211,7 @@ def lsaga(A, double[:] b, props):
 @cython.wraparound(False)
 cdef unlag(unsigned int k, unsigned int m, double gamma, double betak, 
           unsigned int[:] lag, double[:] xk, double[:] gk, double[:] lag_scaling):
+  cdef unsigned int ind
   
   # Unlag the vector
   gscaling = -gamma/betak

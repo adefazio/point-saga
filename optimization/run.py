@@ -35,9 +35,10 @@ sTime = time.time()
 random.seed(42)
 
 logger.info("Loading data")
+#dataset = scipy.io.loadmat("australian.mat")
 #dataset = scipy.io.loadmat("australian_scale.mat")
-dataset = scipy.io.loadmat("mushrooms.mat")
-#dataset = scipy.io.loadmat("rcv1_train.binary.mat")
+#dataset = scipy.io.loadmat("mushrooms.mat")
+dataset = scipy.io.loadmat("rcv1_train.binary.mat")
 X = dataset['X'].transpose()
 d = dataset['d'].flatten()
 
@@ -53,8 +54,14 @@ def runit():
     #INFO:lsaga:Epoch 14 finished
     #INFO:logisticloss: loss: 0.258281887291
     
-    result = saga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
-    #result = lsaga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
-
+    #result = saga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    result = lsaga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    #0.258275346457 
+    #Australian non-scaled. Best step size 1.0/(5 000 000) , 'stepSize': 0.0000002
+    # At one point L is increased to 44,942,696. Yikes.
+    #Lsaga, initial L: 370 508. Doesn't seem to be actually working.
+    # Max norm squared in data: 10,000,403,362. 10 bilion. hm.
+    
+    # For australian_scaled norms are between 6.69 and 13.39.
 if __name__ == "__main__":
     runit()

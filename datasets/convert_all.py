@@ -11,6 +11,11 @@ libsvm2mat(
     ndata=690,
     nfeatures=14)
 
+#libsvm2mat(
+#    fname="australian",
+#    ndata=690,
+#    nfeatures=14)
+
 libsvm2mat(
     fname="covtype.libsvm.binary.scale",
     ndata=581012,

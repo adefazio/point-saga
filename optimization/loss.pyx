@@ -49,7 +49,7 @@ cdef class Loss:
       self.norm_sq[i] = np.dot(rdata, rdata)
       
     logger.info("Squared norm percentiles")
-    perc = np.percentiles(self.norm_sq, [0, 0.025, 0.25, 0.5, 0.75, 0.975, 1.0])
+    perc = np.percentile(self.norm_sq, [0, 2.5, 25, 50, 75, 97.5, 100])
     logger.info(perc)
    
   @cython.cdivision(True)
