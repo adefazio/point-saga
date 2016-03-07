@@ -23,6 +23,7 @@ from pointsaga import pointsaga
 from saga import saga
 from sdca import sdca
 from csdca import csdca
+from lsaga import lsaga
 
 import time
 
@@ -48,7 +49,12 @@ logger.info("Train Proportions: -1 %d   1: %d", sum(d == -1.0), sum(d == 1.0))
 
 def runit():
     
-    result = pointsaga(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001})
+    #INFO:logisticloss: loss: 0.258285864622 errors: 574 (2.836 percent)
+    #INFO:lsaga:Epoch 14 finished
+    #INFO:logisticloss: loss: 0.258281887291
+    
+    #result = saga(X, d, {'loss': 'logistic', 'passes': 15, "reg": 0.0001})
+    result = lsaga(X, d, {'loss': 'logistic', 'passes': 15, "reg": 0.0001, 'stepSize': 1.0/0.625})
 
 if __name__ == "__main__":
     runit()

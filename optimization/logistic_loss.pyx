@@ -29,6 +29,49 @@ cdef class LogisticLoss(Loss):
    
   @cython.cdivision(True)
   @cython.boundscheck(False) 
+  cpdef double linesearch(self, unsigned int i, double activation, double L):
+    cdef double ry = self.d[i]
+    cdef unsigned int ls_iters = 0
+    
+    cdef double Lg = L
+    cdef double f_x = self.fval(i, activation)
+    cdef double g_i = self.subgradient(i, activation)
+    
+    cdef double ap = activation - (self.norm_sq[i]*g_i)/Lg
+    cdef double fp = self.fval(i, ap)
+    
+    #print "a=%1.5f, g_i=%1.5f, xns=%1.2f, ap=%1.5f Lg=%1.9f" % (activation, g_i, self.norm_sq[i], ap, Lg)
+    #print "fp: %1.8f, fm: %1.8f, f_x=%1.8f" % (fp, f_x - self.norm_sq[i]*g_i*g_i/(2.0*Lg), f_x)
+    
+    # Finite differences check. Ok.
+    #fchange = self.fval(i, activation+1e-8) - self.fval(i, activation)
+    #print "fd g: %1.7f" % (fchange/1e-8)
+    
+    while fp >= f_x - self.norm_sq[i]*g_i*g_i/(2.0*Lg) and ls_iters < 20:
+      Lg = 2.0*Lg
+      ap = activation - (self.norm_sq[i]*g_i)/Lg
+      fp = self.fval(i, ap)
+      ls_iters += 1
+      #print "! a=%1.5f, g_i=%1.5f, xns=%1.2f, ap=%1.5f, y=%d" % (activation, g_i, self.norm_sq[i], ap, ry)
+      #print "! fp: %1.8f, fm: %1.8f, f_x=%1.8f" % (fp, f_x - self.norm_sq[i]*g_i/(2.0*Lg), f_x)
+    
+    #print " Lg: %1.7f" % Lg
+  
+    if ls_iters >= 10:
+      print " Ls iters very large: %d, Lg=%1.7f" % (ls_iters, Lg)
+      
+        
+    return Lg
+   
+  @cython.cdivision(True)
+  @cython.boundscheck(False) 
+  cpdef double fval(self, unsigned int i, double activation):
+    cdef double ry = self.d[i]
+   
+    return(log(1+exp(-activation*ry)))
+   
+  @cython.cdivision(True)
+  @cython.boundscheck(False) 
   cpdef double subgradient(self, unsigned int i, double activation):
     cdef double ry = self.d[i]
      
