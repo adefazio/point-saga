@@ -25,7 +25,7 @@ from sparse_util cimport spdot, add_weighted, lagged_update
 @cython.cdivision(True)
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def lsaga(A, double[:] b, props):
+def wsaga(A, double[:] b, props):
     
     # temporaries
     cdef double[:] ydata
@@ -53,12 +53,13 @@ def lsaga(A, double[:] b, props):
     cdef double betak = 1.0 # Scaling factor for xk.
     
     #cdef double gamma = props.get("stepSize", 0.1)
-    cdef double L = 1.0
+    cdef double L = 1.0 # Current Lipschitz used for step size
+    cdef double Lavg = 1.0 # Average Lipschitz across the points
     cdef gamma = 1.0/(L+reg)
     #cdef double L_shrink_factor = pow(2.0, -1.0/n)
     cdef bool use_perm = props.get("usePerm", False)
     
-    logger = logging.getLogger("lsaga")
+    logger = logging.getLogger("wsaga")
 
     cdef int maxiter = props.get("passes", 10)    
     
@@ -69,17 +70,12 @@ def lsaga(A, double[:] b, props):
     # It is used to correctly do the just-in-time updating when
     # L2 regularisation is used.
     cdef double[:] lag_scaling = np.zeros(n*maxiter+1)
-    cdef double[:] lag_scaling2 = np.zeros(n*maxiter+1)
     lag_scaling[0] = 0.0
     lag_scaling[1] = 1.0
-    lag_scaling2[0] = 0.0
-    lag_scaling2[1] = 1.0
     cdef double geosum = 1.0
     cdef double mult = 1.0 - reg*gamma
-    for i in range(2,n*maxiter+1):
-        geosum *= mult
-        lag_scaling2[i] = lag_scaling2[i-1] + geosum
-    geosum = 1.0
+    
+    cdef double[:] ls = np.ones(n)
     
     # For linear learners, we only need to store a single
     # double for each data point, rather than a full gradient vector.
@@ -105,7 +101,7 @@ def lsaga(A, double[:] b, props):
     
     cdef long [:] perm = np.random.permutation(n)
     
-    logger.info("LSaga starting, npoints=%d, ndims=%d, L=%1.1f" % (n, m, L))
+    logger.info("WSaga starting, npoints=%d, ndims=%d, L=%1.1f" % (n, m, L))
     
     loss.store_training_loss(xk)
     
@@ -144,24 +140,16 @@ def lsaga(A, double[:] b, props):
             # Line search
             if True:
               Lp = loss.lipschitz(i, activation)
-              if Lp < 1.1*L:
-                Lp = L
-                #logger.info("LP: %1.2f", Lp)
-            else:
-              Lp = loss.linesearch(i, activation, L)
               
-            if Lp != L:
+              Lavg += (Lp-ls[i])/n
+              ls[i] = Lp
+              
+            if Lavg > 1.1*L:
               unlag(k, m, gamma, betak, lag, xk, gk, lag_scaling)
               betak = 1.0
-              gamma = 1.0/(Lp+reg) 
-              logger.info("Increasing L from %1.9f to %1.9f", L, Lp)
-              L = Lp
-              
-              geosum = 1.0
-              mult = 1.0 - reg*gamma
-              for i in range(2,n*maxiter+1):
-                  geosum *= mult
-                  lag_scaling2[i] = lag_scaling2[i-1] + geosum
+              gamma = 1.0/(Lavg+reg) 
+              logger.info("Increasing L from %1.9f to %1.9f", L, Lavg)
+              L = Lavg
               
               # Reset lag_scaling table for the new gamma
               mult = 1.0 - reg*gamma
@@ -182,14 +170,10 @@ def lsaga(A, double[:] b, props):
             # Update lag table
             geosum *= mult
             lag_scaling[ls_update] = lag_scaling[ls_update-1] + geosum
-            
-            if lag_scaling2[ls_update] != lag_scaling[ls_update]:
-              print "LS: %1.9f, other: %1.9f, geosum: %1.9f, prev: %1.9f" % (lag_scaling[ls_update], lag_scaling[ls_update-1] + geosum, geosum, lag_scaling[ls_update-1])
-            
             ls_update += 1
                 
         logger.info("Epoch %d finished", epoch)
-        logger.info("L: %1.5f", L)
+        logger.info("L: %1.5f Lavg: %1.5f", L, Lavg)
         
         unlag(k, m, gamma, betak, lag, xk, gk, lag_scaling)
         betak = 1.0
@@ -201,7 +185,7 @@ def lsaga(A, double[:] b, props):
         
         loss.store_training_loss(xk)    
     
-    logger.info("L-Point-saga finished")
+    logger.info("W-Point-saga finished")
     
     return {'wlist': loss.wlist, 'flist': loss.flist, 'errorlist': loss.errorlist}
 
@@ -212,7 +196,7 @@ def lsaga(A, double[:] b, props):
 cdef unlag(unsigned int k, unsigned int m, double gamma, double betak, 
           unsigned int[:] lag, double[:] xk, double[:] gk, double[:] lag_scaling):
   cdef unsigned int ind, lagged_amount
-
+  
   # Unlag the vector
   cdef double gscaling = -gamma/betak
   for ind in range(m):

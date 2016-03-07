@@ -24,6 +24,7 @@ from saga import saga
 from sdca import sdca
 from csdca import csdca
 from lsaga import lsaga
+from wsaga import wsaga
 
 import time
 
@@ -55,7 +56,7 @@ def runit():
     #INFO:logisticloss: loss: 0.258281887291
     
     #result = saga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
-    result = lsaga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    #result = lsaga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
     #0.258275346457 
     #Australian non-scaled. Best step size 1.0/(5 000 000) , 'stepSize': 0.0000002
     # At one point L is increased to 44,942,696. Yikes.
@@ -63,5 +64,7 @@ def runit():
     # Max norm squared in data: 10,000,403,362. 10 bilion. hm.
     
     # For australian_scaled norms are between 6.69 and 13.39.
+    
+    result = wsaga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
 if __name__ == "__main__":
     runit()
