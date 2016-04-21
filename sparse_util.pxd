@@ -10,4 +10,3 @@ cdef void lagged_update_with_xbar(long k, double[:] x, double[:] xbar, double al
 cdef void add_weighted(double[:] x, double[:] ydata , int[:] yindices, int ylen, double a)
 
 cdef double spdot(double[:] x, double[:] ydata , int[:] yindices, int ylen)
-                          

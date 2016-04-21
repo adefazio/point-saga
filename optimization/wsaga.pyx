@@ -13,6 +13,8 @@ from libc.math cimport exp, sqrt, log, fabs
 
 from cpython cimport bool
 
+from fast_sampler cimport FastSampler
+
 from get_loss import getLoss
 
 STUFF = "Hi"
@@ -55,7 +57,7 @@ def wsaga(A, double[:] b, props):
     #cdef double gamma = props.get("stepSize", 0.1)
     cdef double L = 1.0 # Current Lipschitz used for step size
     cdef double Lavg = 1.0 # Average Lipschitz across the points
-    cdef gamma = 1.0/(L+reg)
+    cdef gamma = 0.34/(L+reg)
     #cdef double L_shrink_factor = pow(2.0, -1.0/n)
     cdef bool use_perm = props.get("usePerm", False)
     
@@ -76,6 +78,8 @@ def wsaga(A, double[:] b, props):
     cdef double mult = 1.0 - reg*gamma
     
     cdef double[:] ls = np.ones(n)
+    cdef unsigned int[:] visits = np.zeros(n)
+    cdef unsigned int[:] visits_pass = np.zeros(n)
     
     # For linear learners, we only need to store a single
     # double for each data point, rather than a full gradient vector.
@@ -99,7 +103,7 @@ def wsaga(A, double[:] b, props):
     
     ls_update = 2
     
-    cdef long [:] perm = np.random.permutation(n)
+    cdef FastSampler sampler = FastSampler(max_entries=n, max_value=100, min_value=1e-14)
     
     logger.info("WSaga starting, npoints=%d, ndims=%d, L=%1.1f" % (n, m, L))
     
@@ -111,13 +115,10 @@ def wsaga(A, double[:] b, props):
             if epoch == 0:
                 i = j 
             else:
-              if use_perm:
-                if epoch % 2 == 0:
-                  i = j 
-                else:
-                  i = perm[j]
-              else:
-                i = np.random.randint(0, n)
+                i = sampler.sampleAndRemove()
+                visits_pass[i] += 1
+                visits[i] += 1
+                #i = np.random.randint(0, n)
             
             # Selects the (sparse) column of the data matrix containing datapoint i.
             indstart = indptr[i]
@@ -142,16 +143,21 @@ def wsaga(A, double[:] b, props):
             if True:
               Lp = loss.lipschitz(i, activation)
               
-              if False:
+              if True:
                 Lavg += (Lp-ls[i])/n
                 ls[i] = Lp
               else:
                 Lavg = Lp
+            
+            # Add i back into sample pool with weight Lp
+            #if Lp < reg:
+            #  logger.info("Lp: %1.14f, activation: %1.14f, i:%d", Lp, activation, i)
+            sampler.add(i, Lp)
               
             if Lavg > 1.1*L:
               unlag(k, m, gamma, betak, lag, xk, gk, lag_scaling)
               betak = 1.0
-              gamma = 1.0/(Lavg+reg) 
+              gamma = 0.34/(Lavg+reg) 
               logger.info("Increasing L from %1.9f to %1.9f", L, Lavg)
               L = Lavg
               
@@ -213,6 +219,11 @@ def wsaga(A, double[:] b, props):
         geosum = 1.0
         
         loss.store_training_loss(xk)    
+        
+        # Some diagnostics on the sampler
+        #TODO
+        # reset pass counter
+        visits_pass[:] = 0
     
     logger.info("W-Point-saga finished")
     

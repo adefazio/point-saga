@@ -8,12 +8,18 @@ Cython.Compiler.Options.annotate = True
 
 fast_opts = ["-mtune=native", "-march=native", "-O3", 
                 "-ftree-vectorize", "-msse2", "-msse3", "-fPIC", "-ffast-math", 
-                "-std=c99", "-msse", "-mfpmath=sse", "-Wno-unused-function"]
+                 "-msse", "-mfpmath=sse", "-Wno-unused-function"]
+#copts = "-std=c99",
 
 setup(
     cmdclass = {'build_ext': build_ext},
     include_dirs = [np.get_include()],
     ext_modules = [
+        Extension("fast_sampler", ["fast_sampler.pyx"], #"random_fast.cpp"
+            language="c++",
+            libraries=["stdc++"],
+            include_dirs=[np.get_include()],
+            extra_compile_args=fast_opts),
 		Extension("sparse_util", ["optimization/sparse_util.pyx"],
             include_dirs=[np.get_include()],
 		    extra_compile_args=fast_opts),
@@ -28,6 +34,8 @@ setup(
 		    extra_compile_args=fast_opts),
 		Extension("wsaga", ["optimization/wsaga.pyx"],
             include_dirs=[np.get_include()],
+            language="c++",
+            libraries=["stdc++"],
 		    extra_compile_args=fast_opts),
 		Extension("pointsaga", ["optimization/pointsaga.pyx"],
             include_dirs=[np.get_include()],
