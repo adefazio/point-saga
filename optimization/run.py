@@ -25,6 +25,7 @@ from sdca import sdca
 from csdca import csdca
 from lsaga import lsaga
 from wsaga import wsaga
+from isaga import isaga
 
 import time
 
@@ -36,10 +37,10 @@ sTime = time.time()
 random.seed(42)
 
 logger.info("Loading data")
-dataset = scipy.io.loadmat("australian.mat")
+#dataset = scipy.io.loadmat("australian.mat")
 #dataset = scipy.io.loadmat("australian_scale.mat")
 #dataset = scipy.io.loadmat("mushrooms.mat")
-#dataset = scipy.io.loadmat("rcv1_train.binary.mat")
+dataset = scipy.io.loadmat("rcv1_train.binary.mat")
 X = dataset['X'].transpose()
 d = dataset['d'].flatten()
 
@@ -55,7 +56,9 @@ def runit():
     #INFO:lsaga:Epoch 14 finished
     #INFO:logisticloss: loss: 0.258281887291
     
-    #result = saga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    result = saga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    #result = isaga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    
     #result = lsaga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
     #0.258275346457 
     #0.258275346457
@@ -78,5 +81,11 @@ def runit():
     # Now to add the proportional sampling.
     
     # The weighted sampling variant seems to be having issues though.
+    
+    # Normalizing transform for each column
+    Ld = pow(linalg.norm(X, axis=0), 2)/X.shape[0]
+    # Apply it to X
+    Xn = multiply(X, Ld)
+    
 if __name__ == "__main__":
     runit()

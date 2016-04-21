@@ -78,3 +78,32 @@ cdef double spdot(double[:] x, double[:] ydata , int[:] yindices, int ylen):
         v += ydata[i]*x[yindices[i]]
         
     return v
+
+@cython.cdivision(True)
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef double flat_unlag(long m, long k, double[:] xk, double[:] gk, unsigned int[:] lag, double a):
+  cdef unsigned int ind
+  cdef unsigned long lagged_amount = 0
+  
+  for ind in range(m):
+      lagged_amount = k-lag[ind]
+      lag[ind] = k
+      xk[ind] += a*lagged_amount*gk[ind]
+
+# Performs the lagged update of x by g.
+@cython.cdivision(True)
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef void flat_lagged_update(long k, double[:] x, double[:] g, unsigned int[:] lag, 
+                          int[:] yindices, int ylen, double a):
+
+    cdef unsigned int i
+    cdef unsigned int ind
+    cdef unsigned long lagged_amount = 0
+
+    for i in range(ylen):
+        ind = yindices[i]
+        lagged_amount = k-lag[ind]
+        lag[ind] = k
+        x[ind] += lagged_amount*a*g[ind]
