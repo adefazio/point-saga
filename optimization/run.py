@@ -56,8 +56,10 @@ def runit():
     #INFO:lsaga:Epoch 14 finished
     #INFO:logisticloss: loss: 0.258281887291
     
-    result = saga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
-    #result = isaga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    #result = saga(X, d, {'loss': 'logistic', 'passes': 50, "reg": 0.01})
+    result = isaga(X, d, {'loss': 'logistic', 'passes': 50, "reg": 0.01, "stepSize": 0.1, "normalizeData": False, "regUpdatesPerPass": 50})
+    
+    #result = isaga(X, d, {'loss': 'logistic', 'passes': 50, "reg": 0.01, "stepSize": 4.0, "normalizeData": True, "regUpdatesPerPass": 100})
     
     #result = lsaga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
     #0.258275346457 
@@ -83,9 +85,19 @@ def runit():
     # The weighted sampling variant seems to be having issues though.
     
     # Normalizing transform for each column
-    Ld = pow(linalg.norm(X, axis=0), 2)/X.shape[0]
+   # Ld = pow(linalg.norm(X, axis=0), 2)/X.shape[0]
     # Apply it to X
-    Xn = multiply(X, Ld)
+    #Xn = multiply(X, Ld)
+    
+    
+    #INFO:isaga:Percentiles of feature weights
+    #INFO:isaga:[  4.60107006e-03   1.04801098e+00   2.07631943e+00   3.55215281e+00
+    #   1.63313883e+01]
+    #INFO:isaga:Squared norm percentiles [0, 25, 50, 75, 100] (After renorm):
+    #INFO:isaga:[  2.28792303e-02   2.64173357e-01   5.86555276e-01   1.17757560e+00
+    #   4.08003438e+01]
+    #INFO:loss:Squared norm percentiles
+    #INFO:loss:[ 2.  2.  2.  2.  2.  2.  2.]
     
 if __name__ == "__main__":
     runit()

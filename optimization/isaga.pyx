@@ -26,32 +26,20 @@ from sparse_util cimport spdot, add_weighted, flat_lagged_update, flat_unlag
 @cython.boundscheck(False)
 @cython.wraparound(False)
 def isaga(A, double[:] b, props):
+    logger = logging.getLogger("isaga")
     
     # temporaries
     cdef double[:] ydata
     cdef int[:] yindices
     cdef unsigned int i, j, epoch, lagged_amount
     cdef int indstart, indend, ylen, ind
-    cdef double cnew, activation, cchange, gscaling, ry, greg_old, reg_weight
+    cdef double cnew, activation, cchange, gscaling, ry, greg_old, reg_weight, tmp
     
     np.random.seed(42)
     
     cdef double gamma = props.get("stepSize", 0.1)
     cdef double regUpdatesPerPass = props.get("regUpdatesPerPass", 10)
     cdef bool use_perm = props.get("usePerm", False)
-    
-    cdef bool normalize_data = props.get("normalizeData", True)
-    
-    if normalize_data:
-      # Compute column squared norms
-      
-      # Calculate feature weights
-      
-      # Produce normalized copy of A
-      
-      # Set regulariser weights
-    
-    loss = getLoss(A, b, props)
     
     # Data points are stored in rows in CSR format.
     cdef double[:] data = A.data
@@ -60,16 +48,69 @@ def isaga(A, double[:] b, props):
     
     cdef unsigned int n = A.shape[0] # datapoints
     cdef unsigned int m = A.shape[1] # dimensions
-    cdef double inv_n = 1.0/n
+    cdef double inv_n_plus_r = 1.0/(n + regUpdatesPerPass)
+
+    cdef double reg = props.get('reg', 0.0001)
+    cdef double[:] regs = reg*np.ones(m)
     
+    cdef bool normalize_data = props.get("normalizeData", True)
+    
+    cdef double[:] feature_weights = np.ones(m)
+    cdef double[:] bdata, rdata, norm_sq
+    
+    
+    if normalize_data:
+      ## We will accumulate starting at reg value
+      for i in range(m):
+        feature_weights[i] = 0
+      
+      #logger.info("nentries? %d", indptr[n])
+      # Compute column squared norms          
+      for j in range(indptr[n]):
+        feature_weights[indices[j]] += data[j]*data[j];
+      
+      #for i in range(m):
+      #  feature_weights[i] = (4.0*n)/m
+      
+      # Calculate feature weights
+      for i in range(m):
+        if feature_weights[i] == 0:
+          feature_weights[i] = 1.0
+          regs[i] = reg
+        else:
+          tmp = sqrt(m * (reg + feature_weights[i]/n))
+          feature_weights[i] = 1.0/tmp
+          regs[i] = reg*feature_weights[i]*feature_weights[i]
+        #logger.info("%d regs[i]: %1.2e,  fw[i]: %1.2e", i, regs[i], feature_weights[i])
+      # Produce normalized copy of A data
+      bdata = np.empty(indptr[n])
+      
+      for j in range(indptr[n]):
+        bdata[j] = data[j]*feature_weights[indices[j]]
+      
+      # use bdata instead of A's data
+      data = bdata
+      
+      logger.info("Percentiles of feature weights")
+      perc = np.percentile(feature_weights, [0, 25, 50, 75, 100])
+      logger.info(perc)
+      
+      norm_sq = np.zeros(n)
+      for i in range(n):
+        rdata = data[indptr[i]:indptr[i+1]]
+        norm_sq[i] = np.dot(rdata, rdata)
+      
+      logger.info("Squared norm percentiles [0, 25, 50, 75, 100] (After renorm):")
+      perc = np.percentile(norm_sq, [0, 25, 50, 75, 100])
+      logger.info(perc)
+    
+    loss = getLoss(A, b, props)
     cdef double[:] xk = np.zeros(m)
     cdef double[:] gk = np.zeros(m)
     cdef double[:] greg = np.zeros(m)
     
-    cdef double reg = props.get('reg', 0.0001) 
+    cdef double[:] xkrenorm = np.zeros(m)
     
-    logger = logging.getLogger("isaga")
-
     cdef int maxiter = props.get("passes", 10)    
     
     # Tracks for each entry of x, what iteration it was last updated at.
@@ -122,14 +163,14 @@ def isaga(A, double[:] b, props):
               # Unlag
               flat_unlag(m, k, xk, gk, lag, -gamma)
               
-              reg_weight = (n*(reg/regUpdatesPerPass))
+              reg_weight = (n/(regUpdatesPerPass+0.0))
               
               for ind in range(m):
                 greg_old = greg[ind]
-                greg[ind] = reg_weight*xk[ind]
+                greg[ind] = regs[ind]*reg_weight*xk[ind]
                 # Main update for L2 norm term
                 xk[ind] -= gamma*(greg[ind] - greg_old + gk[ind])
-                gk[ind] += regUpdatesPerPass*inv_n*(greg[ind] - greg_old)
+                gk[ind] += (greg[ind] - greg_old)*regUpdatesPerPass*inv_n_plus_r
             
               continue
             
@@ -164,8 +205,14 @@ def isaga(A, double[:] b, props):
         logger.info("Epoch %d finished", epoch)
           
         flat_unlag(m, k, xk, gk, lag, -gamma)
-        loss.store_training_loss(xk)    
+        for i in range(m):
+          xkrenorm[i] = xk[i]*feature_weights[i];
+          
+        loss.store_training_loss(xkrenorm)
     
     logger.info("isaga finished")
+    
+    for i in range(20):
+      logger.info("xkr[%d]=%1.3e    (%1.3e)", i, xkrenorm[i], xk[i])
     
     return {'wlist': loss.wlist, 'flist': loss.flist, 'errorlist': loss.errorlist}
