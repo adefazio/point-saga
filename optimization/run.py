@@ -7,9 +7,6 @@ from numpy import *
 import scipy
 import scipy.sparse
 import scipy.io
-
-
-
 import matplotlib
 
 matplotlib.rcParams['ps.useafm'] = True
@@ -38,9 +35,9 @@ random.seed(42)
 logger.info("Loading data")
 #dataset = scipy.io.loadmat("australian.mat")
 #dataset = scipy.io.loadmat("australian_scale.mat")
-dataset = scipy.io.loadmat("mushrooms.mat")
+#dataset = scipy.io.loadmat("mushrooms.mat")
 #dataset = scipy.io.loadmat("covtype.libsvm.binary.scale.mat")
-#dataset = scipy.io.loadmat("rcv1_train.binary.mat") 
+dataset = scipy.io.loadmat("rcv1_train.binary.mat") 
 X = dataset['X'].transpose()
 d = dataset['d'].flatten()
 
@@ -56,15 +53,18 @@ def runit():
     #INFO:lsaga:Epoch 14 finished
     #INFO:logisticloss: loss: 0.258281887291
     
-    #result = saga(X, d, {'loss': 'logistic', 'passes': 50, "reg": 0.01})
+    result = saga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    
+    
     #result = isaga(X, d, {'loss': 'logistic', 'passes': 80, "reg": 0.0001, "stepSize": 32, "normalizeData": True, "regUpdatesPerPass": 50})
     
     #result = isaga(X, d, {'loss': 'logistic', 'passes': 80, "reg": 0.0001, "stepSize": 4.0, "normalizeData": False, "regUpdatesPerPass": 50})
     
     #result = isaga(X, d, {'loss': 'logistic', 'passes': 50, "reg": 0.01, "stepSize": 4.0, "normalizeData": True, "regUpdatesPerPass": 100})
     
-    #result = saga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001, "stepSize": 0.2})
-    result = lsaga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    #result = saga(X, d, {'loss': 'logistic', 'passes': 1000, "reg": 10.000, "stepSize": 2e-7})
+    #result = lsaga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    #result = isaga(X, d, {'loss': 'logistic', 'passes': 1000, "reg": 1000.000, "adaptive": True, 'stepSize':16, 'regUpdatesPerPass': 200})
     #0.258275346457 
     #0.258275346457
     #0.258275346442

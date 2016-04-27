@@ -33,12 +33,11 @@ def isaga(A, double[:] b, props):
     cdef int[:] yindices
     cdef unsigned int i, j, epoch, lagged_amount
     cdef int indstart, indend, ylen, ind
-    cdef double cnew, activation, cchange, gscaling, ry, greg_old, reg_weight, tmp
+    cdef double cnew, activation, cchange, gscaling, ry, greg_old, reg_weight, tmp, Lp
     
     np.random.seed(42)
     
-    cdef double gamma = props.get("stepSize", 0.1)
-    cdef double regUpdatesPerPass = props.get("regUpdatesPerPass", 10)
+    cdef double regUpdatesPerPass = props.get("regUpdatesPerPass", 20)
     cdef bool use_perm = props.get("usePerm", False)
     
     # Data points are stored in rows in CSR format.
@@ -52,6 +51,14 @@ def isaga(A, double[:] b, props):
 
     cdef double reg = props.get('reg', 0.0001)
     cdef double[:] regs = reg*np.ones(m)
+    
+    cdef bool adaptive = props.get("adaptive", True)
+      
+    cdef double L = 1.0
+    cdef double gamma = 1.0/(L+reg)
+    
+    if not adaptive:
+      gamma = props.get("stepSize", 0.1)
     
     cdef bool normalize_data = props.get("normalizeData", True)
     
@@ -100,6 +107,7 @@ def isaga(A, double[:] b, props):
         rdata = data[indptr[i]:indptr[i+1]]
         norm_sq[i] = np.dot(rdata, rdata)
       
+      logger.info("Squared norm mean after renom: %1.7f", np.mean(norm_sq))
       logger.info("Squared norm percentiles [0, 25, 50, 75, 100] (After renorm):")
       perc = np.percentile(norm_sq, [0, 25, 50, 75, 100])
       logger.info(perc)
@@ -191,6 +199,22 @@ def isaga(A, double[:] b, props):
             cchange = cnew-c[i]
             c[i] = cnew
             
+            if adaptive:
+              # Line search
+              if True:
+                Lp = loss.lipschitz(i, activation)
+                if Lp < 1.1*L:
+                  Lp = L
+              else:
+                Lp = loss.linesearch(i, activation, L)
+              
+              if Lp != L:
+                flat_unlag(m, k, xk, gk, lag, -gamma)
+                
+                gamma = 1.0/(Lp+reg) 
+                logger.info("Increasing L from %1.9f to %1.9f (gamma=%1.2e)", L, Lp, gamma)
+                L = Lp
+            
             # Update xk with sparse step bit
             add_weighted(xk, ydata, yindices, ylen, -cchange*gamma)
             
@@ -202,13 +226,18 @@ def isaga(A, double[:] b, props):
             # update the gradient average
             add_weighted(gk, ydata, yindices, ylen, cchange/(n+regUpdatesPerPass)) 
     
-        logger.info("Epoch %d finished", epoch)
+        logger.info("Epoch %d finished", epoch)  
           
         flat_unlag(m, k, xk, gk, lag, -gamma)
         for i in range(m):
           xkrenorm[i] = xk[i]*feature_weights[i];
-          
+            
         loss.store_training_loss(xkrenorm)
+        
+        if adaptive:
+          logger.info("L: %1.5f (halving for next pass)", L)
+          L /= 2.0
+          gamma = 1.0/(L+reg) 
     
     logger.info("isaga finished")
     
