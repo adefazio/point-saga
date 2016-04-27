@@ -111,6 +111,7 @@ def isaga(A, double[:] b, props):
       logger.info("Squared norm percentiles [0, 25, 50, 75, 100] (After renorm):")
       perc = np.percentile(norm_sq, [0, 25, 50, 75, 100])
       logger.info(perc)
+      logger.info("Max/mean: %1.2f", perc[4]/np.mean(norm_sq))
     
     loss = getLoss(A, b, props)
     cdef double[:] xk = np.zeros(m)

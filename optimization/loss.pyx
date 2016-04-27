@@ -48,9 +48,11 @@ cdef class Loss:
       rdata = self.data[self.indptr[i]:self.indptr[i+1]]
       self.norm_sq[i] = np.dot(rdata, rdata)
       
-    logger.info("Squared norm percentiles")
+    norm_sq_mean = np.mean(self.norm_sq)
+    logger.info("Squared norm mean: %1.5f. Percentiles:", norm_sq_mean)
     perc = np.percentile(self.norm_sq, [0, 2.5, 25, 50, 75, 97.5, 100])
     logger.info(perc)
+    logger.info("Max/mean: %1.2f", perc[6]/norm_sq_mean)
    
   @cython.cdivision(True)
   @cython.boundscheck(False) 

@@ -57,7 +57,7 @@ def wsaga(A, double[:] b, props):
     #cdef double gamma = props.get("stepSize", 0.1)
     cdef double L = 1.0 # Current Lipschitz used for step size
     cdef double Lavg = 1.0 # Average Lipschitz across the points
-    cdef gamma = 0.34/(L+reg)
+    cdef double gamma = 0.34/(L+reg)
     #cdef double L_shrink_factor = pow(2.0, -1.0/n)
     cdef bool use_perm = props.get("usePerm", False)
     
@@ -78,8 +78,8 @@ def wsaga(A, double[:] b, props):
     cdef double mult = 1.0 - reg*gamma
     
     cdef double[:] ls = np.ones(n)
-    cdef unsigned int[:] visits = np.zeros(n)
-    cdef unsigned int[:] visits_pass = np.zeros(n)
+    cdef unsigned int[:] visits = np.zeros(n, dtype='I')
+    cdef unsigned int[:] visits_pass = np.zeros(n, dtype='I')
     
     # For linear learners, we only need to store a single
     # double for each data point, rather than a full gradient vector.
@@ -105,6 +105,8 @@ def wsaga(A, double[:] b, props):
     
     cdef FastSampler sampler = FastSampler(max_entries=n, max_value=100, min_value=1e-14)
     
+    cdef bool use_seperate_update = props.get("useSeparateUpdate", True)
+    
     logger.info("WSaga starting, npoints=%d, ndims=%d, L=%1.1f" % (n, m, L))
     
     loss.store_training_loss(xk)
@@ -118,7 +120,6 @@ def wsaga(A, double[:] b, props):
                 i = sampler.sampleAndRemove()
                 visits_pass[i] += 1
                 visits[i] += 1
-                #i = np.random.randint(0, n)
             
             # Selects the (sparse) column of the data matrix containing datapoint i.
             indstart = indptr[i]
@@ -135,7 +136,7 @@ def wsaga(A, double[:] b, props):
             cnew = loss.subgradient(i, activation)
 
             cchange = cnew-c[i]
-            if False:
+            if not use_seperate_update:
               c[i] = cnew
             betak *= 1.0 - reg*gamma
             
@@ -174,32 +175,32 @@ def wsaga(A, double[:] b, props):
             # Perform the gradient-average part of the step
             lagged_update(k, xk, gk, lag, yindices, ylen, lag_scaling, -gamma/betak)
             
-            # Uniform sampling for the gradient table update:
-            if True:
-              if False:
-                # update the gradient average
-                add_weighted(gk, ydata, yindices, ylen, cchange/n) 
-              else:
-                r = np.random.randint(0, n)
-                indstart = indptr[r]
-                indend = indptr[r+1]
-                ydata = data[indstart:indend]
-                yindices = indices[indstart:indend]
-                ylen = indend-indstart
-                
-                # Apply the missed updates to xk just-in-time
-                lagged_update(k, xk, gk, lag, yindices, ylen, lag_scaling, -gamma/betak)
             
-                activation = betak * spdot(xk, ydata, yindices, ylen)
-            
-                cnew = loss.subgradient(r, activation)
+            # use seperate sampling for the gradient table update?
+            if use_seperate_update:
+              # Uniform sampling for the gradient table update:
+              r = np.random.randint(0, n)
+              indstart = indptr[r]
+              indend = indptr[r+1]
+              ydata = data[indstart:indend]
+              yindices = indices[indstart:indend]
+              ylen = indend-indstart
+              
+              # Apply the missed updates to xk just-in-time
+              lagged_update(k, xk, gk, lag, yindices, ylen, lag_scaling, -gamma/betak)
+          
+              activation = betak * spdot(xk, ydata, yindices, ylen)
+          
+              cnew = loss.subgradient(r, activation)
 
-                cchange = cnew-c[r]
-                c[r] = cnew
-                
-                # Update gradient average for uniformly sampled point.
-                add_weighted(gk, ydata, yindices, ylen, cchange/n) 
+              # Table update
+              cchange = cnew-c[r]
+              c[r] = cnew
+              
+              # Update gradient average for uniformly sampled point.
+              add_weighted(gk, ydata, yindices, ylen, cchange/n) 
             else:
+              # Update gradient average for non-uniformly sampled point.
               add_weighted(gk, ydata, yindices, ylen, cchange/n) 
             
             # Update lag table
@@ -224,6 +225,16 @@ def wsaga(A, double[:] b, props):
         #TODO
         # reset pass counter
         visits_pass[:] = 0
+    
+    
+    logger.info("Sampler weight mean: %1.6f", np.mean(sampler.weights))
+    logger.info("Sampler weights quantiles [0%, 25%, 50%, 75%, 100%]:")
+    perc = np.percentile(sampler.weights, [0, 25, 50, 75, 100])
+    logger.info(perc)
+    logger.info("Visit count quantiles:")
+    logger.info(np.percentile(visits, [0, 25, 50, 75, 100]))
+    most_visited = np.argmax(visits)
+    logger.info("Most visited: %d, visits %d, weight %1.2e", most_visited, visits[most_visited], sampler.weights[most_visited])
     
     logger.info("W-Point-saga finished")
     

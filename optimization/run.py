@@ -22,6 +22,7 @@ from sdca import sdca
 from csdca import csdca
 from lsaga import lsaga
 from isaga import isaga
+from wsaga import wsaga
 
 import time
 
@@ -33,11 +34,11 @@ sTime = time.time()
 random.seed(42)
 
 logger.info("Loading data")
-#dataset = scipy.io.loadmat("australian.mat")
+dataset = scipy.io.loadmat("australian.mat")
 #dataset = scipy.io.loadmat("australian_scale.mat")
 #dataset = scipy.io.loadmat("mushrooms.mat")
 #dataset = scipy.io.loadmat("covtype.libsvm.binary.scale.mat")
-dataset = scipy.io.loadmat("rcv1_train.binary.mat") 
+#dataset = scipy.io.loadmat("rcv1_train.binary.mat") 
 X = dataset['X'].transpose()
 d = dataset['d'].flatten()
 
@@ -53,10 +54,11 @@ def runit():
     #INFO:lsaga:Epoch 14 finished
     #INFO:logisticloss: loss: 0.258281887291
     
-    result = saga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    #result = saga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    #result = wsaga(X, d, {'loss': 'logistic', 'passes': 60, "reg": 0.0001, 'useSeparateUpdate': False})
     
     
-    #result = isaga(X, d, {'loss': 'logistic', 'passes': 80, "reg": 0.0001, "stepSize": 32, "normalizeData": True, "regUpdatesPerPass": 50})
+    result = isaga(X, d, {'loss': 'logistic', 'passes': 5, "reg": 0.0001})
     
     #result = isaga(X, d, {'loss': 'logistic', 'passes': 80, "reg": 0.0001, "stepSize": 4.0, "normalizeData": False, "regUpdatesPerPass": 50})
     
