@@ -32,9 +32,9 @@ def wsaga(A, double[:] b, props):
     # temporaries
     cdef double[:] ydata
     cdef int[:] yindices
-    cdef unsigned int i, j, epoch, lagged_amount, ls_update, r
+    cdef unsigned int i, j, epoch, lagged_amount, ls_update, r, most_visited
     cdef int indstart, indend, ylen, ind
-    cdef double cnew, activation, cchange, gscaling, ry, Lp
+    cdef double cnew, activation, cchange, gscaling, ry, Lk, Lkrev
     
     np.random.seed(42)
     
@@ -55,9 +55,10 @@ def wsaga(A, double[:] b, props):
     cdef double betak = 1.0 # Scaling factor for xk.
     
     #cdef double gamma = props.get("stepSize", 0.1)
-    cdef double L = 1.0 # Current Lipschitz used for step size
-    cdef double Lavg = 1.0 # Average Lipschitz across the points
-    cdef double gamma = 0.34/(L+reg)
+    cdef double gamma_scale = props.get("gammaScale", 0.25)
+    cdef double L = 1.0 + reg # Current Lipschitz used for step size
+    cdef double Lavg = 1.0 + reg # Average Lipschitz across the points
+    cdef double gamma = gamma_scale/L
     #cdef double L_shrink_factor = pow(2.0, -1.0/n)
     cdef bool use_perm = props.get("usePerm", False)
     
@@ -77,7 +78,7 @@ def wsaga(A, double[:] b, props):
     cdef double geosum = 1.0
     cdef double mult = 1.0 - reg*gamma
     
-    cdef double[:] ls = np.ones(n)
+    cdef double[:] ls = (1.0+reg)*np.ones(n)
     cdef unsigned int[:] visits = np.zeros(n, dtype='I')
     cdef unsigned int[:] visits_pass = np.zeros(n, dtype='I')
     
@@ -87,6 +88,7 @@ def wsaga(A, double[:] b, props):
     cdef double[:] c = np.zeros(n)
     
     if False:
+      Lavg = 0.0
       for i in range(n):
           indstart = indptr[i]
           indend = indptr[i+1]
@@ -95,9 +97,14 @@ def wsaga(A, double[:] b, props):
           ylen = indend-indstart
           ry = b[i]
         
-          c[i] = loss.subgradient(i, 0.0)
-        
-          add_weighted(gk, ydata, yindices, ylen, c[i]/n)
+          #c[i] = loss.subgradient(i, 0.0)
+          ls[i] = reg + loss.lipschitz(i, 0.0)
+          Lavg += ls[i]/n
+      
+          #add_weighted(gk, ydata, yindices, ylen, c[i]/n)
+      
+      gamma = gamma_scale/Lavg
+      L = Lavg
     
     cdef unsigned int k = 0 # Current iteration number
     
@@ -107,7 +114,7 @@ def wsaga(A, double[:] b, props):
     
     cdef bool use_seperate_update = props.get("useSeparateUpdate", True)
     
-    logger.info("WSaga starting, npoints=%d, ndims=%d, L=%1.1f" % (n, m, L))
+    logger.info("WSaga starting, npoints=%d, ndims=%d, L=%1.1f, gammaScale=%1.3e" % (n, m, L, gamma_scale))
     
     loss.store_training_loss(xk)
     
@@ -141,24 +148,20 @@ def wsaga(A, double[:] b, props):
             betak *= 1.0 - reg*gamma
             
             # Line search
-            if True:
-              Lp = loss.lipschitz(i, activation)
-              
-              if True:
-                Lavg += (Lp-ls[i])/n
-                ls[i] = Lp
-              else:
-                Lavg = Lp
+            Lprev =  ls[i]
+            Lk = reg + loss.lipschitz(i, activation)
             
-            # Add i back into sample pool with weight Lp
-            #if Lp < reg:
-            #  logger.info("Lp: %1.14f, activation: %1.14f, i:%d", Lp, activation, i)
-            sampler.add(i, Lp)
-              
+            Lavg += (Lk-ls[i])/n
+            ls[i] = Lk
+            
+            # Add i back into sample pool with weight Lk
+            sampler.add(i, Lk)
+            
+            #logger.info("Lavg: %1.9f Lk: %1.9f activation: %1.1e", Lavg, Lk, activation)
             if Lavg > 1.1*L:
               unlag(k, m, gamma, betak, lag, xk, gk, lag_scaling)
               betak = 1.0
-              gamma = 0.34/(Lavg+reg) 
+              gamma = gamma_scale/Lavg 
               logger.info("Increasing L from %1.9f to %1.9f", L, Lavg)
               L = Lavg
               
@@ -168,7 +171,7 @@ def wsaga(A, double[:] b, props):
               geosum = 1.0
             
             # Update xk with sparse step bit (with betak scaling)
-            add_weighted(xk, ydata, yindices, ylen, -cchange*gamma/betak)
+            add_weighted(xk, ydata, yindices, ylen, -cchange*gamma*L/(Lprev*betak))
             
             k += 1
             
@@ -209,15 +212,23 @@ def wsaga(A, double[:] b, props):
             ls_update += 1
                 
         logger.info("Epoch %d finished", epoch)
-        logger.info("L: %1.5f Lavg: %1.5f", L, Lavg)
+        #logger.info("L: %1.5f Lavg: %1.5f mean(ls): %1.5f", L, Lavg, np.mean(ls))
         
         unlag(k, m, gamma, betak, lag, xk, gk, lag_scaling)
         betak = 1.0
-        L /= 2.0
-        gamma = 1.0/(L+reg) 
-        
-        ls_update = 2
-        geosum = 1.0
+        if Lavg <= 0.5*L:
+          logger.info("Decreasing, L: %1.5f Lavg: %1.5f", L, Lavg)
+          #L /= 2.0 # Causes some instability
+          L = 1.2*Lavg
+          gamma = gamma_scale/L 
+          
+          mult = 1.0 - reg*gamma
+          ls_update = 2
+          geosum = 1.0
+          
+          #geosum *= mult
+          #lag_scaling[ls_update] = lag_scaling[ls_update-1] + geosum
+          #ls_update += 1
         
         loss.store_training_loss(xk)    
         

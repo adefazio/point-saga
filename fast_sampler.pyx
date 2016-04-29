@@ -87,6 +87,9 @@ cdef class FastSampler:
         cdef double cumulative_weight = 0
         cdef bool reject
         
+        if self.nentries == 0:
+          raise Exception("Can't sample from empty set")
+        
         u = uniform_fast()*self.total_weight
         
         # Sample a level using the CDF method

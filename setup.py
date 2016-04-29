@@ -6,7 +6,7 @@ import numpy as np
 import Cython.Compiler.Options
 Cython.Compiler.Options.annotate = True
 
-fast_opts = ["-mtune=native", "-march=native", "-O3", 
+fast_opts = ["-mtune=native", "-march=native", "-O3", "-g",
                 "-ftree-vectorize", "-msse2", "-msse3", "-fPIC", "-ffast-math", 
                  "-msse", "-mfpmath=sse", "-Wno-unused-function"]
 #copts = "-std=c99",
@@ -28,6 +28,10 @@ setup(
 		    extra_compile_args=fast_opts),
 		Extension("saga", ["optimization/saga.pyx"],
             include_dirs=[np.get_include()],
+		    extra_compile_args=fast_opts),
+		Extension("sagafast", ["optimization/sagafast.pyx"],
+            include_dirs=[np.get_include()],
+            extra_link_args=["-g"],
 		    extra_compile_args=fast_opts),
 		Extension("isaga", ["optimization/isaga.pyx"],
             include_dirs=[np.get_include()],

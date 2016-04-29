@@ -23,6 +23,7 @@ from csdca import csdca
 from lsaga import lsaga
 from isaga import isaga
 from wsaga import wsaga
+from sagafast import sagafast
 
 import time
 
@@ -34,11 +35,11 @@ sTime = time.time()
 random.seed(42)
 
 logger.info("Loading data")
-dataset = scipy.io.loadmat("australian.mat")
+#dataset = scipy.io.loadmat("australian.mat")
 #dataset = scipy.io.loadmat("australian_scale.mat")
 #dataset = scipy.io.loadmat("mushrooms.mat")
 #dataset = scipy.io.loadmat("covtype.libsvm.binary.scale.mat")
-#dataset = scipy.io.loadmat("rcv1_train.binary.mat") 
+dataset = scipy.io.loadmat("rcv1_train.binary.mat") 
 X = dataset['X'].transpose()
 d = dataset['d'].flatten()
 
@@ -54,11 +55,13 @@ def runit():
     #INFO:lsaga:Epoch 14 finished
     #INFO:logisticloss: loss: 0.258281887291
     
-    #result = saga(X, d, {'loss': 'logistic', 'passes': 30, "reg": 0.0001})
+    result = sagafast(X, d, {'loss': 'logistic', 'passes': 50, "reg": 0.0001})
+    
+    
     #result = wsaga(X, d, {'loss': 'logistic', 'passes': 60, "reg": 0.0001, 'useSeparateUpdate': False})
     
     
-    result = isaga(X, d, {'loss': 'logistic', 'passes': 5, "reg": 0.0001})
+    #result = isaga(X, d, {'loss': 'logistic', 'passes': 5, "reg": 0.0001})
     
     #result = isaga(X, d, {'loss': 'logistic', 'passes': 80, "reg": 0.0001, "stepSize": 4.0, "normalizeData": False, "regUpdatesPerPass": 50})
     
@@ -83,7 +86,10 @@ def runit():
     
     # For australian_scaled norms are between 6.69 and 13.39.
     
-    #result = wsaga(X, d, {'loss': 'logistic', 'passes': 50, "reg": 0.0001})
+    #result = saga(X, d, {'loss': 'logistic', 'passes': 50, "reg": 0.0001})
+    #result = wsaga(X, d, {'loss': 'logistic', 'passes': 200, "reg": 0.0001, 'gammaScale': 0.5}) 
+    #0.258275346400
+    #0.258275346408
     # Ok, version where we decouple table update from step seems to work. good.
     # Now to add the proportional sampling.
     
