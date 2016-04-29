@@ -10,6 +10,7 @@ import logging
 import scipy
 from scipy.sparse import csr_matrix
 from libc.math cimport exp, sqrt, log, fabs
+from libc.stdlib cimport malloc, free
 
 from cpython cimport bool
 
@@ -21,6 +22,11 @@ ctypedef np.float32_t dtype_t
 
 #cimport sparse_util
 from sparse_util cimport spdot, add_weighted, lagged_update
+
+ctypedef struct interlaced:
+  double x
+  double g
+  long lag
 
 @cython.cdivision(True)
 @cython.boundscheck(False)
@@ -55,6 +61,15 @@ def sagafast(A, double[:] b, props):
     
     cdef double[:] xk = np.zeros(m)
     cdef double[:] gk = np.zeros(m)
+    # Tracks for each entry of x, what iteration it was last updated at.
+    cdef unsigned int[:] lag = np.zeros(m, dtype='I')
+    
+    cdef interlaced[:] el = <interlaced[:m]>malloc(m*sizeof(interlaced))
+    
+    for ind in xrange(m):
+      el[m].x = 0.0
+      el[m].g = 0.0
+      el[m].lag = 0
     
     cdef double reg = props.get('reg', 0.0001) 
     cdef double betak = 1.0 # Scaling factor for xk.
@@ -63,9 +78,6 @@ def sagafast(A, double[:] b, props):
 
     cdef int maxiter = props.get("passes", 10)    
     
-    # Tracks for each entry of x, what iteration it was last updated at.
-    cdef unsigned int[:] lag = np.zeros(m, dtype='I')
-
     # This is just a table of the sum the geometric series (1-reg*gamma)
     # It is used to correctly do the just-in-time updating when
     # L2 regularisation is used.
@@ -120,13 +132,13 @@ def sagafast(A, double[:] b, props):
             activation = 0.0
             tmp = 0.0
             
-            for yind in xrange(ylen):
+            for yind in xrange(0, ylen):
                 ind = yindices[yind]
-                lagged_amount = k-lag[ind]
-                lag[ind] = kp1
-                xk[ind] += lag_scaling[lagged_amount]*(gweight*gk[ind])
-            
-                activation += ydata[yind]*xk[ind]
+                lagged_amount = k-el[ind].lag
+                el[ind].lag = kp1
+                el[ind].x += lag_scaling[lagged_amount]*(gweight*el[ind].g)
+          
+                activation += ydata[yind]*el[ind].x
             
             #activation = betak * spdot(xk, ydata, yindices, ylen)
             activation = betak * activation # Correct for betak scaling
@@ -146,8 +158,8 @@ def sagafast(A, double[:] b, props):
             cweight = cchange/n
             for yind in xrange(ylen):
                 ind = yindices[yind]
-                xk[ind] += yweight*ydata[yind] + gweight*gk[ind]
-                gk[ind] += cweight*ydata[yind]
+                el[ind].x += yweight*ydata[yind] + gweight*el[ind].g
+                el[ind].g += cweight*ydata[yind]
                 
             
             
@@ -162,10 +174,11 @@ def sagafast(A, double[:] b, props):
         # Unlag the vector
         gscaling = -gamma/betak
         for ind in xrange(m):
-            lagged_amount = k-lag[ind]
-            lag[ind] = k
-            xk[ind] += lag_scaling[lagged_amount]*gscaling*gk[ind]
-            xk[ind] = betak*xk[ind]
+            lagged_amount = k-el[ind].lag
+            el[ind].lag = k
+            el[ind].x += lag_scaling[lagged_amount]*gscaling*el[ind].g
+            el[ind].x = betak*el[ind].x
+            xk[ind] = el[ind].x
         
         betak = 1.0
         
@@ -173,6 +186,7 @@ def sagafast(A, double[:] b, props):
           loss.store_training_loss(xk)    
     
     logger.info("sagafast finished")
+    free(&el[0])
     
     return {'wlist': loss.wlist, 'flist': loss.flist, 'errorlist': loss.errorlist}
 
@@ -183,3 +197,5 @@ def sagafast(A, double[:] b, props):
 # After loop fusion before and after update: 1.71ish.
 # After moving the random number gen into vectorized numy, 1.60ish
 # Adding @cython.initializedcheck(False) @cython.nonecheck(False) @cython.overflowcheck(False) didn't really help. Still around 1.60.
+# Switching to interlaced x/g/lag gives me 1.3s, a big improvement.
+# Unrolling the first inner loop seemed to not help at all, even made things very slightly workse.
