@@ -58,13 +58,13 @@ def flexsaga(A, double[:] b, props):
     cdef interlaced[:] el = <interlaced[:m]>malloc(m*sizeof(interlaced))
     
     for ind in xrange(m):
-      el[m].x = 0.0
-      el[m].g = 0.0
-      el[m].lag = 0
+      el[m].x = 0.0 # current iterate
+      el[m].g = 0.0 # gradient average quantity
+      el[m].lag = 0 # Tracks for each entry of x, what iteration it was last updated at.
     
+    cdef int regTerms = props.get("regTerms", 20)
     cdef double reg = props.get('reg', 0.0001) 
     cdef double[:] regs = reg*np.ones(m)
-    cdef double betak = 1.0 # Scaling factor for xk.
     
     cdef bool normalize_data = props.get("normalizeData", True)
     
@@ -126,18 +126,6 @@ def flexsaga(A, double[:] b, props):
     
     cdef int maxiter = props.get("passes", 10)    
     
-    # Tracks for each entry of x, what iteration it was last updated at.
-    cdef unsigned int[:] lag = np.zeros(m, dtype='I')
-
-    # This is just a table of the sum the geometric series (1-reg*gamma)
-    # It is used to correctly do the just-in-time updating when
-    # L2 regularisation is used.
-    cdef double[:] lag_scaling = np.zeros(n*maxiter+1)
-    lag_scaling[0] = 0.0
-    lag_scaling[1] = 1.0
-    cdef double geosum = 1.0
-    cdef double mult = 1.0 - reg*gamma
-    
     cdef double[:] ls = (1.0+reg)*np.ones(n)
     cdef unsigned int[:] visits = np.zeros(n, dtype='I')
     cdef unsigned int[:] visits_pass = np.zeros(n, dtype='I')
@@ -148,8 +136,6 @@ def flexsaga(A, double[:] b, props):
     cdef double[:] c = np.zeros(n)
     
     cdef unsigned int k = 0 # Current iteration number
-    
-    ls_update = 2
     
     cdef FastSampler sampler = FastSampler(max_entries=n, max_value=100, min_value=1e-14)
     
@@ -180,7 +166,6 @@ def flexsaga(A, double[:] b, props):
             yindices = indices[indstart:indend]
             ylen = indend-indstart
             
-            gweight = -gamma/betak
             kp1 = k+1
             activation = 0.0
             tmp = 0.0
@@ -189,18 +174,15 @@ def flexsaga(A, double[:] b, props):
                 ind = yindices[yind]
                 lagged_amount = k-el[ind].lag
                 el[ind].lag = kp1
-                el[ind].x += lag_scaling[lagged_amount]*(gweight*el[ind].g)
+                el[ind].x -= gamma*lagged_amount*el[ind].g
           
                 activation += ydata[yind]*el[ind].x
-            
-            activation = betak * activation # Correct for betak scaling
             
             cnew = loss.subgradient(i, activation)
 
             cchange = cnew-c[i]
             if epoch == 0 or not use_seperate_update:
               c[i] = cnew
-            betak *= 1.0 - reg*gamma
             k += 1 
             
             # Line search
@@ -215,8 +197,12 @@ def flexsaga(A, double[:] b, props):
             
             #logger.info("Lavg: %1.9f Lk: %1.9f activation: %1.1e", Lavg, Lk, activation)
             if Lavg > 1.1*L:
-              unlag(k, m, gamma, betak, lag, xk, gk, lag_scaling)
-              betak = 1.0
+              # Unlag
+              for ind in xrange(m):
+                  lagged_amount = k-el[ind].lag
+                  el[ind].lag = k
+                  el[ind].x -= gamma*lagged_amount*el[ind].g
+              
               gamma = gamma_scale/Lavg 
               logger.info("Increasing L from %1.9f to %1.9f", L, Lavg)
               L = Lavg
@@ -226,8 +212,8 @@ def flexsaga(A, double[:] b, props):
               ls_update = 2
               geosum = 1.0
             
-            yweight = -cchange*gamma*L/(Lprev*betak) #-cchange*gamma/betak
-            gweight = -gamma/betak
+            yweight = -cchange*gamma*L/Lprev #-cchange*gamma
+            gweight = -gamma
             cweight = cchange/n
             for yind in xrange(ylen):
                 ind = yindices[yind]
@@ -244,19 +230,15 @@ def flexsaga(A, double[:] b, props):
               yindices = indices[indstart:indend]
               ylen = indend-indstart
               
-              gweight = -gamma/betak
               activation = 0.0
-              tmp = 0.0
             
               for yind in xrange(0, ylen):
                   ind = yindices[yind]
                   lagged_amount = k-el[ind].lag
                   el[ind].lag = k
-                  el[ind].x += lag_scaling[lagged_amount]*(gweight*el[ind].g)
+                  el[ind].x -= gamma*lagged_amount*el[ind].g
           
                   activation += ydata[yind]*el[ind].x
-            
-              activation = betak * activation
               
               cnew = loss.subgradient(r, activation)
 
@@ -268,37 +250,22 @@ def flexsaga(A, double[:] b, props):
             for yind in xrange(ylen):
                 ind = yindices[yind]
                 el[ind].g += cweight*ydata[yind] 
-            
-            # Update lag table
-            geosum *= mult
-            lag_scaling[ls_update] = lag_scaling[ls_update-1] + geosum
-            ls_update += 1
                 
         logger.info("Epoch %d finished", epoch)
         logger.info("L: %1.5f Lavg: %1.5f mean(ls): %1.5f", L, Lavg, np.mean(ls))
         
         # Unlag the vector
-        gscaling = -gamma/betak
         for ind in xrange(m):
             lagged_amount = k-el[ind].lag
             el[ind].lag = k
-            el[ind].x += lag_scaling[lagged_amount]*gscaling*el[ind].g
-            el[ind].x = betak*el[ind].x
+            el[ind].x -= gamma*lagged_amount*el[ind].g
             xk[ind] = el[ind].x*feature_weights[ind]
         
-        betak = 1.0
-        
-        #unlag(k, m, gamma, betak, lag, xk, gk, lag_scaling)
-        #betak = 1.0
         if Lavg <= 0.5*L:
-          logger.info("Decreasing, L: %1.5f Lavg: %1.5f", L, Lavg)
+          logger.info("L: %1.5f Lavg: %1.5f, new L: %1.5f", L, Lavg, 1.2*Lavg)
           #L /= 2.0 # Causes some instability
           L = 1.2*Lavg
-          gamma = gamma_scale/L 
-          
-          mult = 1.0 - reg*gamma
-          ls_update = 2
-          geosum = 1.0
+          gamma = gamma_scale/L
         
         loss.store_training_loss(xk)    
         
@@ -319,21 +286,3 @@ def flexsaga(A, double[:] b, props):
     logger.info("flexsaga finished")
     
     return {'wlist': loss.wlist, 'flist': loss.flist, 'errorlist': loss.errorlist}
-
-
-@cython.cdivision(True)
-@cython.boundscheck(False)
-@cython.wraparound(False)
-cdef unlag(unsigned int k, unsigned int m, double gamma, double betak, 
-          unsigned int[:] lag, double[:] xk, double[:] gk, double[:] lag_scaling):
-  cdef unsigned int ind, lagged_amount
-  
-  # Unlag the vector
-  cdef double gscaling = -gamma/betak
-  for ind in range(m):
-      lagged_amount = k-lag[ind]
-      lag[ind] = k
-      xk[ind] += lag_scaling[lagged_amount]*gscaling*gk[ind]
-      xk[ind] = betak*xk[ind]
-  
-  betak = 1.0
