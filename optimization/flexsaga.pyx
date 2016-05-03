@@ -52,6 +52,7 @@ def flexsaga(A, double[:] b, props):
     cdef unsigned int n = A.shape[0] # datapoints
     cdef unsigned int m = A.shape[1] # dimensions
     
+    cdef double inv_n = 1.0/n
     cdef double[:] xk = np.zeros(m)
     cdef double[:] greg = np.zeros(m)
     
@@ -126,12 +127,12 @@ def flexsaga(A, double[:] b, props):
     #cdef double gamma = props.get("stepSize", 0.1)
     cdef double gamma_scale = props.get("gammaScale", 0.15)
     cdef double L = 1.0 + reg # Current Lipschitz used for step size
-    cdef double Lavg = reg # Average Lipschitz across the points
+    cdef double Lavg = 1.0 + reg # Average Lipschitz across the points
     cdef double gamma = gamma_scale/L
     
     cdef int maxiter = props.get("passes", 10)    
     
-    cdef double[:] ls = (1.0+reg)*np.ones(n)
+    cdef double[:] ls = np.ones(n)
     cdef unsigned int[:] visits = np.zeros(n, dtype='I')
     cdef unsigned int[:] visits_pass = np.zeros(n, dtype='I')
     
@@ -171,7 +172,7 @@ def flexsaga(A, double[:] b, props):
                 #visits[i] += 1
             
             if i == n: # Regulariser term
-              logger.info("Reg j=%d", j)
+              #logger.info("Reg j=%d", j)
               Lk = n*normalized_reg
           
               for ind in range(m):
@@ -184,7 +185,7 @@ def flexsaga(A, double[:] b, props):
                 # Main update for L2 norm term
                 el[ind].x -= (gamma*L/Lk)*(greg[ind] - greg_old)
                 el[ind].x -= gamma*el[ind].g
-                el[ind].g += (greg[ind] - greg_old)*regs[ind]
+                el[ind].g += (greg[ind] - greg_old)*inv_n
             
               # We don't want to miss any on the first pass
               if epoch == 0:
@@ -270,7 +271,7 @@ def flexsaga(A, double[:] b, props):
                   
                   greg_old = greg[ind]
                   greg[ind] = n*regs[ind]*el[ind].x
-                  el[ind].g += (greg[ind] - greg_old)*regs[ind]
+                  el[ind].g += (greg[ind] - greg_old)*inv_n
             
                 continue
               else:
