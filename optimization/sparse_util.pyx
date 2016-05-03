@@ -107,3 +107,20 @@ cdef void flat_lagged_update(long k, double[:] x, double[:] g, unsigned int[:] l
         lagged_amount = k-lag[ind]
         lag[ind] = k
         x[ind] += lagged_amount*a*g[ind]
+        
+# Performs the lagged update of x by g.
+@cython.cdivision(True)
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef void flat_single_step(long k, double[:] x, double[:] g, unsigned int[:] lag, 
+                          int[:] yindices, int ylen, double a):
+
+    cdef unsigned int i
+    cdef unsigned int ind
+    #cdef unsigned long lagged_amount = 0
+
+    for i in range(ylen):
+        ind = yindices[i]
+        #lagged_amount = k-lag[ind]
+        lag[ind] = k
+        x[ind] += a*g[ind]

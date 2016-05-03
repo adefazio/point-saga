@@ -21,12 +21,7 @@ STUFF = "Hi"
 ctypedef np.float32_t dtype_t
 
 #cimport sparse_util
-from sparse_util cimport spdot, add_weighted, lagged_update
-
-ctypedef struct interlaced:
-  double x
-  double g
-  long lag
+from sparse_util cimport spdot, add_weighted, lagged_update, interlaced
 
 @cython.cdivision(True)
 @cython.boundscheck(False)

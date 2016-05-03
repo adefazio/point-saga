@@ -24,6 +24,7 @@ from lsaga import lsaga
 from isaga import isaga
 from wsaga import wsaga
 from sagafast import sagafast
+from flexsaga import flexsaga
 
 import time
 
@@ -55,10 +56,11 @@ def runit():
     #INFO:lsaga:Epoch 14 finished
     #INFO:logisticloss: loss: 0.258281887291
     
-    result = sagafast(X, d, {'loss': 'logistic', 'passes': 50, "reg": 0.0001})
+    #result = sagafast(X, d, {'loss': 'logistic', 'passes': 50, "reg": 0.0001})
+    result = flexsaga(X, d, {'loss': 'logistic', 'passes': 50, "reg": 0.0001})
     
     
-    #result = wsaga(X, d, {'loss': 'logistic', 'passes': 60, "reg": 0.0001, 'useSeparateUpdate': False})
+    #result = wsaga(X, d, {'loss': 'logistic', 'passes': 60, "reg": 0.000, 'useSeparateUpdate': True, 'gammaScale': 0.1})
     
     
     #result = isaga(X, d, {'loss': 'logistic', 'passes': 5, "reg": 0.0001})

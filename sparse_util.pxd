@@ -15,3 +15,11 @@ cdef double flat_unlag(long m, long k, double[:] xk, double[:] gk, unsigned int[
 
 cdef void flat_lagged_update(long k, double[:] x, double[:] g, unsigned int[:] lag, 
                           int[:] yindices, int ylen, double a)
+
+cdef void flat_single_step(long k, double[:] x, double[:] g, unsigned int[:] lag, 
+            int[:] yindices, int ylen, double a)
+
+ctypedef struct interlaced:
+  double x
+  double g
+  long lag
