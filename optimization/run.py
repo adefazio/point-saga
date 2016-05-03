@@ -57,7 +57,7 @@ def runit():
     #INFO:logisticloss: loss: 0.258281887291
     
     #result = sagafast(X, d, {'loss': 'logistic', 'passes': 50, "reg": 0.0001})
-    result = flexsaga(X, d, {'loss': 'logistic', 'passes': 50, "reg": 0.000})
+    result = flexsaga(X, d, {'loss': 'logistic', 'passes': 50, "reg": 0.0001})
     
     
     #result = wsaga(X, d, {'loss': 'logistic', 'passes': 60, "reg": 0.000, 'useSeparateUpdate': True, 'gammaScale': 0.1})

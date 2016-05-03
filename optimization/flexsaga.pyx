@@ -26,7 +26,7 @@ ctypedef np.float32_t dtype_t
 from sparse_util cimport spdot, add_weighted, lagged_update, interlaced
 
 @cython.cdivision(True)
-@cython.boundscheck(False)
+@cython.boundscheck(True)
 @cython.wraparound(False)
 def flexsaga(A, double[:] b, props):
     
@@ -36,7 +36,7 @@ def flexsaga(A, double[:] b, props):
     cdef unsigned int i, j, epoch, lagged_amount, ls_update, r, most_visited
     cdef int indstart, indend, ylen, ind
     cdef double cnew, activation, cchange, gscaling, ry, Lk, Lkrev, Lprev
-    cdef double yweight, gweight, cweight, tmp
+    cdef double yweight, gweight, cweight, tmp, reg_weight, greg_old
     
     logger = logging.getLogger("flexsaga")
     
@@ -53,23 +53,27 @@ def flexsaga(A, double[:] b, props):
     cdef unsigned int m = A.shape[1] # dimensions
     
     cdef double[:] xk = np.zeros(m)
-    cdef double[:] gk = np.zeros(m)
+    cdef double[:] greg = np.zeros(m)
     
     cdef interlaced[:] el = <interlaced[:m]>malloc(m*sizeof(interlaced))
     
+   # logger.info("ind")
     for ind in xrange(m):
-      el[m].x = 0.0 # current iterate
-      el[m].g = 0.0 # gradient average quantity
-      el[m].lag = 0 # Tracks for each entry of x, what iteration it was last updated at.
+      el[ind].x = 0.0 # current iterate
+      el[ind].g = 0.0 # gradient average quantity
+      el[ind].lag = 0 # Tracks for each entry of x, what iteration it was last updated at.
     
     cdef int regTerms = props.get("regTerms", 20)
     cdef double reg = props.get('reg', 0.0001) 
     cdef double[:] regs = reg*np.ones(m)
+    cdef double normalized_reg = reg
+    #logger.info("a")
     
-    cdef bool normalize_data = props.get("normalizeData", True)
+    cdef bool normalize_data = props.get("normalizeData", False)
     
     cdef double[:] feature_weights = np.ones(m)
     cdef double[:] bdata, rdata, norm_sq
+    #logger.info("b")
     
     if normalize_data:
       ## We will accumulate starting at reg value
@@ -118,8 +122,9 @@ def flexsaga(A, double[:] b, props):
       logger.info(perc)
       logger.info("Max/mean: %1.2f", perc[4]/np.mean(norm_sq))
     
+    #logger.info("post norm")
     #cdef double gamma = props.get("stepSize", 0.1)
-    cdef double gamma_scale = props.get("gammaScale", 0.25)
+    cdef double gamma_scale = props.get("gammaScale", 0.15)
     cdef double L = 1.0 + reg # Current Lipschitz used for step size
     cdef double Lavg = 1.0 + reg # Average Lipschitz across the points
     cdef double gamma = gamma_scale/L
@@ -137,7 +142,8 @@ def flexsaga(A, double[:] b, props):
     
     cdef unsigned int k = 0 # Current iteration number
     
-    cdef FastSampler sampler = FastSampler(max_entries=n, max_value=100, min_value=1e-14)
+    cdef FastSampler sampler = FastSampler(max_entries=n+1, max_value=100, min_value=1e-14)
+    sampler.add(n, n*normalized_reg)
     
     cdef bool use_seperate_update = props.get("useSeparateUpdate", True)
     
@@ -148,16 +154,44 @@ def flexsaga(A, double[:] b, props):
     loss.store_training_loss(xk)
     
     for epoch in range(maxiter):
-            
-        ordering = np.random.random_integers(low=0, high=n-1, size=n)
+           
+        if normalized_reg > 0: 
+          ordering = np.random.random_integers(low=0, high=n+regTerms-1, size=n)
+        else:
+          ordering = np.random.random_integers(low=0, high=n-1, size=n)
             
         for j in range(n):
             if epoch == 0:
                 i = j
+                if normalized_reg > 0 and i % (n/regTerms) == 0 and i > 0:
+                  i = n
             else:
                 i = sampler.sampleAndRemove()
                 #visits_pass[i] += 1
                 #visits[i] += 1
+            
+            if i == n: # Regulariser term
+              logger.info("Reg j=%d", j)
+              Lk = n*normalized_reg
+          
+              for ind in range(m):
+                lagged_amount = k-el[ind].lag
+                el[ind].lag = k
+                el[ind].x -= gamma*lagged_amount*el[ind].g
+              
+                greg_old = greg[ind]
+                greg[ind] = n*regs[ind]*el[ind].x
+                # Main update for L2 norm term
+                el[ind].x -= (gamma*L/Lk)*(greg[ind] - greg_old)
+                el[ind].x -= gamma*el[ind].g
+                el[ind].g += (greg[ind] - greg_old)*regs[ind]
+            
+              # We don't want to miss any on the first pass
+              if epoch == 0:
+                i = j
+              else:
+                sampler.add(n, n*normalized_reg)
+                continue
             
             # Selects the (sparse) column of the data matrix containing datapoint i.
             indstart = indptr[i]
@@ -165,10 +199,10 @@ def flexsaga(A, double[:] b, props):
             ydata = data[indstart:indend]
             yindices = indices[indstart:indend]
             ylen = indend-indstart
+            #logger.info("a: normal j=%d i=%d", j, i)
             
             kp1 = k+1
             activation = 0.0
-            tmp = 0.0
             
             for yind in xrange(0, ylen):
                 ind = yindices[yind]
@@ -184,20 +218,23 @@ def flexsaga(A, double[:] b, props):
             if epoch == 0 or not use_seperate_update:
               c[i] = cnew
             k += 1 
+            #logger.info("b: normal j=%d", j)
             
-            # Line search
+            # Update weight
             Lprev =  ls[i]
             Lk = reg + loss.lipschitz(i, activation)
             
             Lavg += (Lk-ls[i])/n
             ls[i] = Lk
-            
+
             # Add i back into sample pool with weight Lk
+            # TODO: maybe have a minimum value for this for numerical stability
             sampler.add(i, Lk)
-            
+            #logger.info("c: normal j=%d", j)
             #logger.info("Lavg: %1.9f Lk: %1.9f activation: %1.1e", Lavg, Lk, activation)
             if Lavg > 1.1*L:
               # Unlag
+              #logger.info("Unlag")
               for ind in xrange(m):
                   lagged_amount = k-el[ind].lag
                   el[ind].lag = k
@@ -224,27 +261,40 @@ def flexsaga(A, double[:] b, props):
             if epoch > 0 and use_seperate_update:
               # Uniform sampling for the gradient table update:
               r = ordering[j]
-              indstart = indptr[r]
-              indend = indptr[r+1]
-              ydata = data[indstart:indend]
-              yindices = indices[indstart:indend]
-              ylen = indend-indstart
-              
-              activation = 0.0
-            
-              for yind in xrange(0, ylen):
-                  ind = yindices[yind]
+              if r >= n: # Regulariser terms
+                for ind in range(m):
+                  # Unlag everything first
                   lagged_amount = k-el[ind].lag
                   el[ind].lag = k
                   el[ind].x -= gamma*lagged_amount*el[ind].g
-          
-                  activation += ydata[yind]*el[ind].x
+                  
+                  greg_old = greg[ind]
+                  greg[ind] = n*regs[ind]*el[ind].x
+                  el[ind].g += (greg[ind] - greg_old)*regs[ind]
+            
+                continue
+              else:
+                indstart = indptr[r]
+                indend = indptr[r+1]
+                ydata = data[indstart:indend]
+                yindices = indices[indstart:indend]
+                ylen = indend-indstart
               
-              cnew = loss.subgradient(r, activation)
+                activation = 0.0
+            
+                for yind in xrange(0, ylen):
+                    ind = yindices[yind]
+                    lagged_amount = k-el[ind].lag
+                    el[ind].lag = k
+                    el[ind].x -= gamma*lagged_amount*el[ind].g
+          
+                    activation += ydata[yind]*el[ind].x
+              
+                cnew = loss.subgradient(r, activation)
 
-              # Table update
-              cchange = cnew-c[r]
-              c[r] = cnew
+                # Table update
+                cchange = cnew-c[r]
+                c[r] = cnew
             
             cweight = cchange/n
             for yind in xrange(ylen):
