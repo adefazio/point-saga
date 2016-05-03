@@ -126,7 +126,7 @@ def flexsaga(A, double[:] b, props):
     #cdef double gamma = props.get("stepSize", 0.1)
     cdef double gamma_scale = props.get("gammaScale", 0.15)
     cdef double L = 1.0 + reg # Current Lipschitz used for step size
-    cdef double Lavg = 1.0 + reg # Average Lipschitz across the points
+    cdef double Lavg = reg # Average Lipschitz across the points
     cdef double gamma = gamma_scale/L
     
     cdef int maxiter = props.get("passes", 10)    
