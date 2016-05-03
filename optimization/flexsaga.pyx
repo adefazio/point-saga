@@ -38,6 +38,8 @@ def flexsaga(A, double[:] b, props):
     cdef double cnew, activation, cchange, gscaling, ry, Lk, Lkrev, Lprev
     cdef double yweight, gweight, cweight, tmp
     
+    logger = logging.getLogger("flexsaga")
+    
     np.random.seed(42)
     
     loss = getLoss(A, b, props)
@@ -61,18 +63,67 @@ def flexsaga(A, double[:] b, props):
       el[m].lag = 0
     
     cdef double reg = props.get('reg', 0.0001) 
+    cdef double[:] regs = reg*np.ones(m)
     cdef double betak = 1.0 # Scaling factor for xk.
+    
+    cdef bool normalize_data = props.get("normalizeData", True)
+    
+    cdef double[:] feature_weights = np.ones(m)
+    cdef double[:] bdata, rdata, norm_sq
+    
+    if normalize_data:
+      ## We will accumulate starting at reg value
+      for i in range(m):
+        feature_weights[i] = 0
+      
+      #logger.info("nentries? %d", indptr[n])
+      # Compute column squared norms          
+      for j in range(indptr[n]):
+        feature_weights[indices[j]] += data[j]*data[j];
+      
+      #for i in range(m):
+      #  feature_weights[i] = (4.0*n)/m
+      
+      # Calculate feature weights
+      for i in range(m):
+        if feature_weights[i] == 0:
+          feature_weights[i] = 1.0
+          regs[i] = reg
+        else:
+          tmp = sqrt(m * (reg + feature_weights[i]/n))
+          feature_weights[i] = 1.0/tmp
+          regs[i] = reg*feature_weights[i]*feature_weights[i]
+        #logger.info("%d regs[i]: %1.2e,  fw[i]: %1.2e", i, regs[i], feature_weights[i])
+      # Produce normalized copy of A data
+      bdata = np.empty(indptr[n])
+      
+      for j in range(indptr[n]):
+        bdata[j] = data[j]*feature_weights[indices[j]]
+      
+      # use bdata instead of A's data
+      data = bdata
+      
+      logger.info("Percentiles of feature weights")
+      perc = np.percentile(feature_weights, [0, 25, 50, 75, 100])
+      logger.info(perc)
+      
+      norm_sq = np.zeros(n)
+      for i in range(n):
+        rdata = data[indptr[i]:indptr[i+1]]
+        norm_sq[i] = np.dot(rdata, rdata)
+      
+      logger.info("Squared norm mean after renom: %1.7f", np.mean(norm_sq))
+      logger.info("Squared norm percentiles [0, 25, 50, 75, 100] (After renorm):")
+      perc = np.percentile(norm_sq, [0, 25, 50, 75, 100])
+      logger.info(perc)
+      logger.info("Max/mean: %1.2f", perc[4]/np.mean(norm_sq))
     
     #cdef double gamma = props.get("stepSize", 0.1)
     cdef double gamma_scale = props.get("gammaScale", 0.25)
     cdef double L = 1.0 + reg # Current Lipschitz used for step size
     cdef double Lavg = 1.0 + reg # Average Lipschitz across the points
     cdef double gamma = gamma_scale/L
-    #cdef double L_shrink_factor = pow(2.0, -1.0/n)
-    cdef bool use_perm = props.get("usePerm", False)
     
-    logger = logging.getLogger("flexsaga")
-
     cdef int maxiter = props.get("passes", 10)    
     
     # Tracks for each entry of x, what iteration it was last updated at.
@@ -95,25 +146,6 @@ def flexsaga(A, double[:] b, props):
     # double for each data point, rather than a full gradient vector.
     # The value stored is the activation * betak * x product.
     cdef double[:] c = np.zeros(n)
-    
-    if False:
-      Lavg = 0.0
-      for i in range(n):
-          indstart = indptr[i]
-          indend = indptr[i+1]
-          ydata = data[indstart:indend]
-          yindices = indices[indstart:indend]
-          ylen = indend-indstart
-          ry = b[i]
-        
-          #c[i] = loss.subgradient(i, 0.0)
-          ls[i] = reg + loss.lipschitz(i, 0.0)
-          Lavg += ls[i]/n
-      
-          #add_weighted(gk, ydata, yindices, ylen, c[i]/n)
-      
-      gamma = gamma_scale/Lavg
-      L = Lavg
     
     cdef unsigned int k = 0 # Current iteration number
     
@@ -252,7 +284,7 @@ def flexsaga(A, double[:] b, props):
             el[ind].lag = k
             el[ind].x += lag_scaling[lagged_amount]*gscaling*el[ind].g
             el[ind].x = betak*el[ind].x
-            xk[ind] = el[ind].x
+            xk[ind] = el[ind].x*feature_weights[ind]
         
         betak = 1.0
         
