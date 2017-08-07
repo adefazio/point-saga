@@ -46,16 +46,21 @@ def bregman(A, double[:] b, props):
     cdef unsigned int n = A.shape[0] # datapoints
     cdef unsigned int m = A.shape[1] # dimensions
 
+    # Current iterate
     cdef double[:] xk = np.zeros(m)
     cdef double[:] xk_old = np.zeros(m)
+    # Prox center
     cdef double[:] yk = np.zeros(m)
     cdef double[:] yk_old = np.zeros(m)
     cdef double[:] yk_prime = np.zeros(m)
+    # SVRG recalibratino point
     cdef double[:] zk = np.zeros(m)
+    # Full gradient at zk.
     cdef double[:] gk = np.zeros(m)
 
     cdef double gamma = props.get("stepSize", 0.1)
     cdef double reg = props.get('reg', 0.0001)
+    cdef double prox_strength = props.get("proxStrength", 0.0001)
     #cdef bool use_lag = props.get("useLag", True)
     cdef bool use_perm = props.get("usePerm", False)
 
@@ -131,7 +136,7 @@ def bregman(A, double[:] b, props):
               #SVRG step:
               # Part of the step is dense:
               for p in range(m):
-                xk[p] = (1-gamma*reg)*xk[p] - gamma*gk[p]
+                xk[p] = (1-gamma*reg)*xk[p] - gamma*(gk[p] + prox_strength*(xk[p]-yk[p]))
               # Sparse part:
               add_weighted(xk, ydata, yindices, ylen, -(cnew-cold)*gamma)
 
@@ -151,7 +156,7 @@ def bregman(A, double[:] b, props):
       #    yk_old[p] = yk[p]
 
       #loss.compute_loss(xk, "xk:")
-      loss.store_training_loss(xk_old, "xk:")
+      loss.store_training_loss(xk_old, "outer xk:")
 
     logger.info("Bregman finished")
 

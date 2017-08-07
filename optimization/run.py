@@ -51,7 +51,7 @@ def runit():
     #reg 0.0001, expecting loss: 0.258275346XXX errors: 569 (2.811 percent)
 
     #result = pointsaga(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001})
-    result = bregman(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001})
+    result = bregman(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001, "proxStrength": 0.0001})
 
 if __name__ == "__main__":
     runit()
