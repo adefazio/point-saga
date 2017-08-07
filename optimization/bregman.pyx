@@ -36,7 +36,8 @@ def bregman(A, double[:] b, props):
     cdef int[:] yindices
     cdef unsigned int i, j, p, epoch, outerepoch, lagged_amount
     cdef int indstart, indend, ylen, ind
-    cdef double cnew, cold, activation, cchange, gscaling, sg, new_loc
+    cdef double cnew, cold, activation, cchange, gscaling, sg, new_loc, x_sub_y_dot
+    cdef double x_sub_y_dot, z_sub_y_dot, ykdot
 
     # Data points are stored in columns in CSC format.
     cdef double[:] data = A.data
@@ -105,7 +106,9 @@ def bregman(A, double[:] b, props):
         ylen = indend-indstart
         ry = b[i]
         activation = spdot(xk, ydata, yindices, ylen)
+        x_sub_y_dot = activation - spdot(yk, ydata, yindices, ylen)
         cnew = loss.subgradient(i, activation)
+        cnew += loss.hessian(i, activation)*x_sub_y_dot
         add_weighted(gk, ydata, yindices, ylen, cnew*ninv)
 
       for epoch in range(maxinner):
@@ -126,17 +129,22 @@ def bregman(A, double[:] b, props):
 
               k += 1
 
-              activation_new = spdot(xk, ydata, yindices, ylen)
-              activation_old = spdot(zk, ydata, yindices, ylen)
+              ykdot = spdot(yk, ydata, yindices, ylen)
 
-              cnew = loss.subgradient(i, activation_new)
-              cold = loss.subgradient(i, activation_old)
+              activation = spdot(xk, ydata, yindices, ylen)
+              x_sub_y_dot = activation - ykdot
+              cnew = loss.subgradient(i, activation)
+              cnew += loss.hessian(i, activation)*x_sub_y_dot
 
+              activation = spdot(zk, ydata, yindices, ylen)
+              z_sub_y_dot = activation - ykdot
+              cold = loss.subgradient(i, activation)
+              cold += loss.hessian(i, activation)*z_sub_y_dot
 
               #SVRG step:
               # Part of the step is dense:
               for p in range(m):
-                xk[p] = (1-gamma*reg)*xk[p] - gamma*(gk[p] + prox_strength*(xk[p]-yk[p]))
+                xk[p] = (1-gamma*reg)*xk[p] - gamma*(gk[p] + 2*prox_strength*(xk[p]-yk[p]))
               # Sparse part:
               add_weighted(xk, ydata, yindices, ylen, -(cnew-cold)*gamma)
 
