@@ -29,15 +29,14 @@ from get_loss import getLoss
 @cython.cdivision(True)
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def csdca(A, double[:] b, props):
+def bregman(A, double[:] b, props):
 
     # temporaries
     cdef double[:] ydata
     cdef int[:] yindices
     cdef unsigned int i, j, p, epoch, outerepoch, lagged_amount
     cdef int indstart, indend, ylen, ind
-    cdef double cnew, activation, cchange, gscaling, cold, sg, new_loc
-    cdef double alpha_new
+    cdef double cnew, cold, activation, cchange, gscaling, sg, new_loc
 
     # Data points are stored in columns in CSC format.
     cdef double[:] data = A.data
@@ -52,19 +51,15 @@ def csdca(A, double[:] b, props):
     cdef double[:] yk = np.zeros(m)
     cdef double[:] yk_old = np.zeros(m)
     cdef double[:] yk_prime = np.zeros(m)
+    cdef double[:] zk = np.zeros(m)
     cdef double[:] gk = np.zeros(m)
 
-    cdef double kappa = props.get("stepSize", 0.1)
+    cdef double gamma = props.get("stepSize", 0.1)
     cdef double reg = props.get('reg', 0.0001)
-    cdef bool use_lag = props.get("useLag", True)
+    #cdef bool use_lag = props.get("useLag", True)
     cdef bool use_perm = props.get("usePerm", False)
 
-    cdef double reg_conversion_factor = 1-(reg/kappa)/(1+reg/kappa)
-
-    cdef double lamb = reg_conversion_factor/(n*kappa)
-    cdef double q = reg/(reg+kappa)
-    cdef double alpha = sqrt(q)
-    cdef double beta = alpha*(1-alpha)/(alpha*alpha + alpha)
+    cdef ninv = 1.0/n
 
     loss = getLoss(A, b, props)
 
@@ -73,15 +68,10 @@ def csdca(A, double[:] b, props):
 
     np.random.seed(42)
 
-    logger = logging.getLogger("csdca")
+    logger = logging.getLogger("bregman")
 
     cdef int maxiter = props.get("passes", 10)
     cdef int maxinner = props.get("maxinner", 1)
-
-    # For linear learners, we only need to store a single
-    # double for each data point, rather than a full gradient vector.
-    # The value stored is the activation * wscale * x product.
-    cdef double[:] c = np.zeros(n)
 
     cdef unsigned int k = 0 # Current iteration number
 
@@ -91,14 +81,28 @@ def csdca(A, double[:] b, props):
     flist = []
     errorlist = []
 
-    logger.info("reg: %1.3e, lamb: %1.3e, q: %1.3e", reg, lamb, q)
-    logger.info("CSDCA starting, npoints=%d, ndims=%d" % (n, m))
-
-    logger.info("alpha=%1.3e, beta=%1.3e, reg_conversion_factor=%1.7e", alpha, beta, reg_conversion_factor)
+    logger.info("reg: %1.3e, gamma: %1.3e", reg, gamma)
+    logger.info("Bregman starting, npoints=%d, ndims=%d" % (n, m))
 
     loss.store_training_loss(xk)
 
     for outerepoch in range(maxiter):
+      #  Recalculate the recalibration point's gradient at zk=zk
+      for p in range(m):
+        zk[p] = xk[p]
+        gk[p] = 0.0
+
+      for i in range(n):
+        indstart = indptr[i]
+        indend = indptr[i+1]
+        ydata = data[indstart:indend]
+        yindices = indices[indstart:indend]
+        ylen = indend-indstart
+        ry = b[i]
+        activation = spdot(xk, ydata, yindices, ylen)
+        cnew = loss.subgradient(i, activation)
+        add_weighted(gk, ydata, yindices, ylen, cnew*ninv)
+
       for epoch in range(maxinner):
 
           for j in range(n):
@@ -117,49 +121,38 @@ def csdca(A, double[:] b, props):
 
               k += 1
 
-              # Remove old g_j from xk
-              add_weighted(xk, ydata, yindices, ylen, lamb*c[i])
+              activation_new = spdot(xk, ydata, yindices, ylen)
+              activation_old = spdot(zk, ydata, yindices, ylen)
 
-              activation = spdot(xk, ydata, yindices, ylen)
+              cnew = loss.subgradient(i, activation_new)
+              cold = loss.subgradient(i, activation_old)
 
-              (new_loc, cnew) = loss.prox(lamb, i, activation)
 
-              cold = c[i]
-              cchange = cnew-c[i]
-              c[i] = cnew
+              #SVRG step:
+              # Part of the step is dense:
+              for p in range(m):
+                xk[p] = (1-gamma*reg)*xk[p] - gamma*gk[p]
+              # Sparse part:
+              add_weighted(xk, ydata, yindices, ylen, -(cnew-cold)*gamma)
 
-              # Double check prox
-              if True and loss.is_differentiable:
-                sg = loss.subgradient(i, new_loc)
-                if fabs(sg - cnew) > 1e-5:
-                  logger.info("Bad prox. sg: %1.8e, prox-sg: %1.8e", sg, cnew)
+          logger.info("Bregman Inner epoch finished")
 
-              # Put g_j back into xk
-              add_weighted(xk, ydata, yindices, ylen, -lamb*cnew)
-
-          logger.info("CSDCA Inner epoch finished")
-
-      asq = alpha*alpha
-      alpha_new = 0.5*(sqrt(q*q - 2*q*asq + asq*asq + 4*asq) + q - asq)
-      beta = alpha*(1-alpha)/(asq + alpha_new)
-
-      logger.info("CSDCA Outer. alpha=%1.3e, alpha_new=%1.3e, beta=%1.3e", alpha, alpha_new, beta)
-
+      # Set yk
       for p in range(m):
-        yk[p] = xk[p] + beta*(xk[p] - xk_old[p])
+        yk[p] = xk[p]
         xk_old[p] = xk[p]
 
-      alpha = alpha_new
+      #alpha = alpha_new
 
       # Set new xk
-      for p in range(m):
-        yk[p] = reg_conversion_factor*yk[p]
-        xk[p] = xk[p] - yk_old[p] + yk[p]
-        yk_old[p] = yk[p]
+      #for p in range(m):
+      #    yk[p] = reg_conversion_factor*yk[p]
+      #    xk[p] = xk[p] - yk_old[p] + yk[p]
+      #    yk_old[p] = yk[p]
 
       #loss.compute_loss(xk, "xk:")
       loss.store_training_loss(xk_old, "xk:")
 
-    logger.info("CSDCA finished")
+    logger.info("Bregman finished")
 
     return {'wlist': loss.wlist, 'flist': loss.flist, 'errorlist': loss.errorlist}

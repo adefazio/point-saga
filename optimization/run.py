@@ -23,6 +23,7 @@ from pointsaga import pointsaga
 from saga import saga
 from sdca import sdca
 from csdca import csdca
+from bregman import bregman
 
 import time
 
@@ -47,8 +48,10 @@ logger.info("Data with %d points and %d features loaded.", n, m)
 logger.info("Train Proportions: -1 %d   1: %d", sum(d == -1.0), sum(d == 1.0))
 
 def runit():
-    
-    result = pointsaga(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001})
+    #reg 0.0001, expecting loss: 0.258275346XXX errors: 569 (2.811 percent)
+
+    #result = pointsaga(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001})
+    result = bregman(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001})
 
 if __name__ == "__main__":
     runit()

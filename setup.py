@@ -6,8 +6,8 @@ import numpy as np
 import Cython.Compiler.Options
 Cython.Compiler.Options.annotate = True
 
-fast_opts = ["-mtune=native", "-march=native", "-O3", 
-                "-ftree-vectorize", "-msse2", "-msse3", "-fPIC", "-ffast-math", 
+fast_opts = ["-mtune=native", "-march=native", "-O3",
+                "-ftree-vectorize", "-msse2", "-msse3", "-fPIC", "-ffast-math",
                 "-std=c99", "-msse", "-mfpmath=sse", "-Wno-unused-function"]
 
 setup(
@@ -32,6 +32,9 @@ setup(
 		Extension("csdca", ["optimization/csdca.pyx"],
             include_dirs=[np.get_include()],
 		    extra_compile_args=fast_opts),
+		Extension("bregman", ["optimization/bregman.pyx"],
+            include_dirs=[np.get_include()],
+		    extra_compile_args=fast_opts),
 		Extension("get_loss", ["optimization/get_loss.pyx"],
             include_dirs=[np.get_include()],
 		    extra_compile_args=fast_opts),
@@ -49,4 +52,3 @@ setup(
 		    extra_compile_args=fast_opts)
     ]
 )
-
