@@ -24,6 +24,7 @@ from saga import saga
 from sdca import sdca
 from csdca import csdca
 from bregman import bregman
+from cgsvrg import cgsvrg
 
 import time
 
@@ -49,9 +50,16 @@ logger.info("Train Proportions: -1 %d   1: %d", sum(d == -1.0), sum(d == 1.0))
 
 def runit():
     #reg 0.0001, expecting loss: 0.258275346XXX errors: 569 (2.811 percent)
+    #"reg": 1e-6 step 1, 300 epochs: loss: 0.033747761546 errors: 22 (0.109 percent)
 
-    #result = pointsaga(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001})
-    result = bregman(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001, "proxStrength": 0.0001})
+    #quadratic loss reg 5e-6. end loss 0.025039.
+    #svrg end 0.025491, saga end  0.025473. Similar.
+    result = cgsvrg(X, d, {'loss': 'squared', 'passes': 40, "reg": 5e-6, 'stepSize': 0.02})
+    #result = pointsaga(X, d, {'loss': 'squared', 'passes': 40, "reg": 5e-6, 'stepSize': 1.0})
+
+    #result = pointsaga(X, d, {'loss': 'logistic', 'passes': 40, "reg": 1e-6, 'stepSize': 1.0})
+    #result = bregman(X, d, {'loss': 'logistic', 'passes': 20, "maxinner": 2, "reg": 1e-6, 'stepSize': 1.0,
+    #                        "proxStrength": 0.0001, 'useBreg': True})
 
 if __name__ == "__main__":
     runit()

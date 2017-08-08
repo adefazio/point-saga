@@ -36,7 +36,7 @@ def bregman(A, double[:] b, props):
     cdef int[:] yindices
     cdef unsigned int i, j, p, epoch, outerepoch, lagged_amount
     cdef int indstart, indend, ylen, ind
-    cdef double cnew, cold, activation, cchange, gscaling, sg, new_loc, x_sub_y_dot
+    cdef double cnew, cold, activation, cchange, gscaling, sg, new_loc
     cdef double x_sub_y_dot, z_sub_y_dot, ykdot
 
     # Data points are stored in columns in CSC format.
@@ -62,7 +62,7 @@ def bregman(A, double[:] b, props):
     cdef double gamma = props.get("stepSize", 0.1)
     cdef double reg = props.get('reg', 0.0001)
     cdef double prox_strength = props.get("proxStrength", 0.0001)
-    #cdef bool use_lag = props.get("useLag", True)
+    cdef bool use_breg = props.get("useBreg", True)
     cdef bool use_perm = props.get("usePerm", False)
 
     cdef ninv = 1.0/n
@@ -106,9 +106,10 @@ def bregman(A, double[:] b, props):
         ylen = indend-indstart
         ry = b[i]
         activation = spdot(xk, ydata, yindices, ylen)
-        x_sub_y_dot = activation - spdot(yk, ydata, yindices, ylen)
         cnew = loss.subgradient(i, activation)
-        cnew += loss.hessian(i, activation)*x_sub_y_dot
+        if use_breg:
+            x_sub_y_dot = activation - spdot(yk, ydata, yindices, ylen)
+            cnew += loss.hessian(i, activation)*x_sub_y_dot
         add_weighted(gk, ydata, yindices, ylen, cnew*ninv)
 
       for epoch in range(maxinner):
@@ -132,14 +133,14 @@ def bregman(A, double[:] b, props):
               ykdot = spdot(yk, ydata, yindices, ylen)
 
               activation = spdot(xk, ydata, yindices, ylen)
-              x_sub_y_dot = activation - ykdot
               cnew = loss.subgradient(i, activation)
-              cnew += loss.hessian(i, activation)*x_sub_y_dot
+              if use_breg:
+                cnew += loss.hessian(i, activation)*(activation - ykdot)
 
               activation = spdot(zk, ydata, yindices, ylen)
-              z_sub_y_dot = activation - ykdot
               cold = loss.subgradient(i, activation)
-              cold += loss.hessian(i, activation)*z_sub_y_dot
+              if use_breg:
+                cold += loss.hessian(i, activation)*(activation - ykdot)
 
               #SVRG step:
               # Part of the step is dense:
@@ -148,7 +149,7 @@ def bregman(A, double[:] b, props):
               # Sparse part:
               add_weighted(xk, ydata, yindices, ylen, -(cnew-cold)*gamma)
 
-          logger.info("Bregman Inner epoch finished")
+          logger.info("Bregman Inner epoch finished (%d)" % (outerepoch*maxinner + epoch))
 
       # Set yk
       for p in range(m):
