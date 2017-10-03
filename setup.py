@@ -6,8 +6,8 @@ import numpy as np
 import Cython.Compiler.Options
 Cython.Compiler.Options.annotate = True
 
-fast_opts = ["-mtune=native", "-march=native", "-O3", 
-                "-ftree-vectorize", "-msse2", "-msse3", "-fPIC", "-ffast-math", 
+fast_opts = ["-mtune=native", "-march=native", "-O3",
+                "-ftree-vectorize", "-msse2", "-msse3", "-fPIC", "-ffast-math",
                 "-std=c99", "-msse", "-mfpmath=sse", "-Wno-unused-function"]
 
 setup(
@@ -24,6 +24,9 @@ setup(
             include_dirs=[np.get_include()],
 		    extra_compile_args=fast_opts),
 		Extension("pointsaga", ["optimization/pointsaga.pyx"],
+            include_dirs=[np.get_include()],
+		    extra_compile_args=fast_opts),
+		Extension("pointsaga_dense", ["optimization/pointsaga_dense.pyx"],
             include_dirs=[np.get_include()],
 		    extra_compile_args=fast_opts),
 		Extension("sdca", ["optimization/sdca.pyx"],
@@ -49,4 +52,3 @@ setup(
 		    extra_compile_args=fast_opts)
     ]
 )
-
