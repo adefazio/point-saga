@@ -32,6 +32,7 @@ def newton_dense(A, double[:] b, props):
     cdef unsigned int i, j, p, epoch, lagged_amount
     cdef int indstart, indend, ylen, ind
     cdef double cnew, activation, cchange, gscaling, cold, sg, new_loc
+    cdef double cx, rx, norm_sq, xactivation, step_weight, expact
 
     # Data points are stored in columns in CSC format.
     cdef double[:] data = A.data
@@ -56,7 +57,7 @@ def newton_dense(A, double[:] b, props):
 
     np.random.seed(42)
 
-    logger = logging.getLogger("pointsaga dense")
+    logger = logging.getLogger("newton dense")
 
     cdef int maxiter = props.get("passes", 10)
 
@@ -102,29 +103,28 @@ def newton_dense(A, double[:] b, props):
             yindices = indices[indstart:indend]
             ylen = indend-indstart
             ry = b[i]
+            cold = c[i]
 
             k += 1
 
             #gamma_prime = gamma*prox_conversion_factor
             xactivation = spdot(xk, ydata, yindices, ylen)
             cx = loss.subgradient(i, xactivation)
-            rx = 0 #TODO compute the sigma(1-sigma) quantity here.
+            expact = exp(ry*xactivation)
+            rx = expact/((1.0+expact)**2)
 
             #Apply gradient change to xk
             add_weighted(xk, ydata, yindices, ylen,
-                         (c[i]-cx-xactivation*rx)*gamma)
+                         -gamma*(cx-cold-xactivation*rx))
 
             for p in range(m):
                 xk[p] = xk[p] - gamma*gk[p]
-                #xk[p] = prox_conversion_factor*xk[p]
 
             activation = spdot(xk, ydata, yindices, ylen)
-            norm_sq = loss.norm_sq[i]
+            norm_sq = loss.normSq(i)
 
             for p in range(m):
                 xk[p] = xk[p]/(1+gamma*reg)
-            #activation = spdot(xk, ydata, yindices, ylen)
-            #(new_loc, cnew) = loss.prox(gamma_prime, i, activation)
 
             # This is the main equation really
             step_weight = gamma*rx*activation/((1+gamma*reg)**2)
@@ -132,8 +132,13 @@ def newton_dense(A, double[:] b, props):
 
             add_weighted(xk, ydata, yindices, ylen, -step_weight)
 
-            cold = c[i]
-            cnew = step_weight/gamma #TODO is this right?
+            # Compute cnew:
+            final_activation = spdot(xk, ydata, yindices, ylen)
+            #expact = exp(ry*final_activation)
+            #rx = expact/((1.0+expact)**2)
+            cnew = cx + rx*(final_activation-xactivation)
+
+            #cnew = step_weight/gamma #TODO is this right?
             #TODO compute table update
             cchange = cnew-c[i]
             c[i] = cnew
