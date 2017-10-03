@@ -25,6 +25,7 @@ from sdca import sdca
 from csdca import csdca
 from pointsaga_dense import pointsaga_dense
 from newton_dense import newton_dense
+from newton import newton
 
 import time
 
@@ -50,8 +51,8 @@ logger.info("Train Proportions: -1 %d   1: %d", sum(d == -1.0), sum(d == 1.0))
 
 def runit():
 
-    result = newton_dense(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001})
-    #result = pointsaga(X, d, {'loss': 'logistic', 'passes': 40, "reg": 0.0001})
+    #result = newton(X, d, {'loss': 'logistic', 'passes': 80, "reg": 0.0001})
+    result = pointsaga(X, d, {'loss': 'logistic', 'passes': 80, "reg": 0.0001})
 
 if __name__ == "__main__":
     runit()

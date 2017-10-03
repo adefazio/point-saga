@@ -24,14 +24,14 @@ from get_loss import getLoss
 @cython.cdivision(True)
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def newton_dense(A, double[:] b, props):
+def newton(A, double[:] b, props):
 
     # temporaries
     cdef double[:] ydata
     cdef int[:] yindices
     cdef unsigned int i, j, p, epoch, lagged_amount
     cdef int indstart, indend, ylen, ind
-    cdef double cnew, activation, cchange, gscaling, cold, sg, new_loc
+    cdef double cnew, activation, cchange, cold, final_activation
     cdef double cx, rx, norm_sq, xactivation, step_weight, expact
 
     # Data points are stored in columns in CSC format.
@@ -48,22 +48,37 @@ def newton_dense(A, double[:] b, props):
 
     cdef double gamma = props.get("stepSize", 0.1)
     cdef double reg = props.get('reg', 0.0001)
-    cdef bool use_lag = props.get("useLag", True)
     cdef bool use_perm = props.get("usePerm", False)
 
     loss = getLoss(A, b, props)
 
+    cdef double wscale = 1.0
     cdef double ry
 
-    np.random.seed(42)
-
-    logger = logging.getLogger("newton dense")
-
-    cdef int maxiter = props.get("passes", 10)
+    # Tracks for each entry of x, what iteration it was last updated at.
+    cdef unsigned int[:] lag = np.zeros(m, dtype='I')
 
     # Used to convert from prox_f to prox of f plus a regulariser.
     cdef double gamma_prime
     cdef double prox_conversion_factor = 1-(reg*gamma)/(1+reg*gamma)
+
+    # This is just a table of the sum the geometric series (1-reg*gamma)
+    # It is used to correctly do the just-in-time updating when
+    # L2 regularisation is used.
+    cdef double[:] lag_scaling = np.zeros(n+2)
+    lag_scaling[0] = 0.0
+    lag_scaling[1] = 1
+    cdef double geosum = 1
+    cdef double mult = prox_conversion_factor
+    for i in range(2,n+2):
+        geosum *= mult
+        lag_scaling[i] = lag_scaling[i-1] + geosum
+
+    np.random.seed(42)
+
+    logger = logging.getLogger("newton sparse")
+
+    cdef int maxiter = props.get("passes", 10)
 
     # gradient table
     cdef double[:] c = np.zeros(n)
@@ -76,9 +91,9 @@ def newton_dense(A, double[:] b, props):
     flist = []
     errorlist = []
 
-    logger.info("Gamma: %1.2e, reg: %1.3e, prox_conversion_factor: %1.8f, 1-reg*gamma: %1.8f",
-                gamma, reg, prox_conversion_factor, 1.0 - reg*gamma)
-    logger.info("Newton (dense) Point-saga starting, npoints=%d, ndims=%d" % (n, m))
+    logger.info("Gamma: %1.2e, reg: %1.3e, 1-reg*gamma: %1.8f",
+                gamma, reg, 1.0 - reg*gamma)
+    logger.info("Newton Point-saga starting, npoints=%d, ndims=%d" % (n, m))
 
     loss.store_training_loss(xk)
 
@@ -107,39 +122,39 @@ def newton_dense(A, double[:] b, props):
 
             k += 1
 
-            #gamma_prime = gamma*prox_conversion_factor
-            xactivation = spdot(xk, ydata, yindices, ylen)
+            xactivation = wscale*spdot(xk, ydata, yindices, ylen)
             cx = loss.subgradient(i, xactivation)
             expact = exp(ry*xactivation)
             rx = expact/((1.0+expact)**2)
 
+            # Correct for lag:
+            lagged_update(k, xk, gk, lag, yindices, ylen, lag_scaling, -gamma/wscale)
+
             #Apply gradient change to xk
             add_weighted(xk, ydata, yindices, ylen,
-                         -gamma*(cx-cold-xactivation*rx))
+                         -gamma*(cx-cold-xactivation*rx)/wscale)
 
-            for p in range(m):
-                xk[p] = xk[p] - gamma*gk[p]
+            #for p in range(m):
+            #    xk[p] = xk[p] - gamma*gk[p]
 
-            activation = spdot(xk, ydata, yindices, ylen)
+            activation = wscale*spdot(xk, ydata, yindices, ylen)
             norm_sq = loss.normSq(i)
 
-            for p in range(m):
-                xk[p] = xk[p]/(1+gamma*reg)
+            # Scale xk down
+            #for p in range(m):
+            #    xk[p] = xk[p]/(1+gamma*reg)
+            wscale *= prox_conversion_factor
 
             # This is the main equation really
             step_weight = gamma*rx*activation/((1+gamma*reg)**2)
             step_weight /= 1 + gamma*rx*norm_sq/(1+gamma*reg)
 
-            add_weighted(xk, ydata, yindices, ylen, -step_weight)
+            add_weighted(xk, ydata, yindices, ylen, -step_weight/wscale)
 
-            # Compute cnew:
-            final_activation = spdot(xk, ydata, yindices, ylen)
-            #expact = exp(ry*final_activation)
-            #rx = expact/((1.0+expact)**2)
+            # Calculation for cnew
+            final_activation = wscale*spdot(xk, ydata, yindices, ylen)
             cnew = cx + rx*(final_activation-xactivation)
 
-            #cnew = step_weight/gamma #TODO is this right?
-            #TODO compute table update
             cchange = cnew-c[i]
             c[i] = cnew
 
@@ -151,6 +166,17 @@ def newton_dense(A, double[:] b, props):
 
         logger.info("Epoch %d finished", epoch)
 
+
+        # Unlag the vector
+        gscaling = -gamma/wscale
+        for ind in range(m):
+            lagged_amount = k-lag[ind]
+            if lagged_amount > 0:
+                lag[ind] = k
+                xk[ind] += (lag_scaling[lagged_amount+1]-1)*gscaling*gk[ind]
+            xk[ind] = wscale*xk[ind]
+
+        wscale = 1.0
 
         loss.store_training_loss(xk)
 
