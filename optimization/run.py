@@ -52,7 +52,9 @@ logger.info("Train Proportions: -1 %d   1: %d", sum(d == -1.0), sum(d == 1.0))
 def runit():
 
     #result = newton(X, d, {'loss': 'logistic', 'passes': 80, "reg": 0.0001})
-    result = pointsaga(X, d, {'loss': 'logistic', 'passes': 80, "reg": 0.0001})
+    #result = pointsaga(X, d, {'loss': 'logistic', 'passes': 50, "reg": 0.0001})
+    result = saga(X, d, {'loss': 'logistic', 'passes': 100, "reg": 0.0000001, "usePerm": True})
+    #result = saga(X, d, {'loss': 'logistic', 'useSAG': True, 'passes': 100, "reg": 0.0000001, "usePerm": True})
 
 if __name__ == "__main__":
     runit()
