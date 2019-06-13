@@ -7,7 +7,11 @@ from numpy import *
 import scipy
 import scipy.sparse
 import scipy.io
-import cPickle as pickle
+import math
+try:
+	import cPickle as pickle
+except ImportError:
+	import pickle
 import os
 
 
@@ -60,7 +64,7 @@ if __name__ == "__main__":
         subset_dataset = default_props.get("subsetDataset", 1.0)
         if subset_dataset < 1:
             order = random.permutation(n)
-            order = order[:ceil(n*subset_dataset)]
+            order = order[:math.ceil(n*subset_dataset)]
             X = X[order,:]
             d = d[order]
 
@@ -119,7 +123,7 @@ if __name__ == "__main__":
             bestStepSize[method] = nonnan_stepSizes[best_idx]
             #import pdb; pdb.set_trace()
     
-        print bestStepSize
+        print(bestStepSize)
         
         # Baseline fmin
         alt_props = {'stepSize':  bestStepSize[baseline_method], "passes": 100}
